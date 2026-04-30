@@ -24,6 +24,8 @@ Recommended exercise:
 5. Open a PR against this sample app.
 6. Use `sample-app-ci.yml` as the deterministic gate.
 
+This README line intentionally lives under `sample-app/**` so documentation-only PRs can trigger the sample application CI during workflow tests.
+
 ## Local Commands
 
 ```powershell
