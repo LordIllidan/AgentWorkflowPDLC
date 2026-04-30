@@ -53,6 +53,7 @@ The action does not run LLMs and does not call external tools. It only validates
 docs/
   agentic-pdlc-workflow.md
   github-issue-approval-workflow.md
+  pr-workflow-test-scenario.md
 ```
 
 ## Start
