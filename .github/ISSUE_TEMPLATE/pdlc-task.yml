@@ -1,0 +1,109 @@
+name: PDLC Agent Task
+description: Track an agentic PDLC task with manual approval gates.
+title: "[PDLC] "
+labels:
+  - pdlc
+  - agent-workflow
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this issue to coordinate an agentic PDLC task.
+
+        Business input can be written in Polish. Technical metadata, links, commands, and artifact names should stay in English.
+
+  - type: textarea
+    id: business-context
+    attributes:
+      label: Business context
+      description: Opisz biznesowo po polsku, co ma zostać zrobione i po co.
+      placeholder: "Cel biznesowy, użytkownik, problem, oczekiwany efekt..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: repositories
+    attributes:
+      label: Repositories and systems
+      description: List repositories, services, systems, and documents involved.
+      placeholder: |
+        - repo:
+        - service:
+        - docs:
+    validations:
+      required: true
+
+  - type: dropdown
+    id: initial-risk
+    attributes:
+      label: Initial risk guess
+      description: Initial human guess. Risk Classifier Agent may change it.
+      options:
+        - low
+        - medium
+        - high
+        - regulated
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance-criteria
+    attributes:
+      label: Initial acceptance criteria
+      description: Wpisz znane kryteria akceptacji po polsku. Product Agent może je doprecyzować.
+      placeholder: |
+        - Given...
+        - When...
+        - Then...
+    validations:
+      required: false
+
+  - type: textarea
+    id: artifacts
+    attributes:
+      label: PDLC artifacts and links
+      description: Add links to generated artifacts as the workflow progresses.
+      value: |
+        - Intake:
+        - Risk card:
+        - Requirements:
+        - Architecture / ADR:
+        - Implementation plan:
+        - Pull request:
+        - Review:
+        - QA:
+        - Security:
+        - Documentation:
+        - Release:
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: manual-approvals
+    attributes:
+      label: Manual approval gates
+      description: Only a human reviewer should check these boxes after reviewing the matching artifact.
+      options:
+        - label: Intake approved
+          required: false
+        - label: Risk classification approved
+          required: false
+        - label: Requirements approved
+          required: false
+        - label: Architecture approved or not required
+          required: false
+        - label: Planning approved
+          required: false
+        - label: Coding ready for PR
+          required: false
+        - label: Review approved
+          required: false
+        - label: QA approved
+          required: false
+        - label: Security approved
+          required: false
+        - label: Documentation approved
+          required: false
+        - label: Release readiness approved
+          required: false
+

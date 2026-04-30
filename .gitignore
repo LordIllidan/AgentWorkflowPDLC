@@ -1,0 +1,10 @@
+bin/
+obj/
+target/
+node_modules/
+dist/
+.angular/
+.idea/
+.vscode/
+*.log
+

@@ -1,0 +1,94 @@
+name: Sample App CI
+
+on:
+  pull_request:
+    paths:
+      - "sample-app/**"
+      - ".github/workflows/sample-app-ci.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "sample-app/**"
+      - ".github/workflows/sample-app-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  dotnet-api:
+    name: .NET API
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Build
+        working-directory: sample-app/dotnet-api
+        run: dotnet build --configuration Release
+
+  java-api:
+    name: Java API
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: maven
+
+      - name: Test
+        working-directory: sample-app/java-api
+        run: mvn test
+
+  angular-frontend:
+    name: Angular Frontend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install
+        working-directory: sample-app/angular-frontend
+        run: npm install
+
+      - name: Build
+        working-directory: sample-app/angular-frontend
+        run: npm run build
+
+  package:
+    name: Package ZIP
+    runs-on: windows-latest
+    needs:
+      - dotnet-api
+      - java-api
+      - angular-frontend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create ZIP
+        shell: pwsh
+        run: .\sample-app\scripts\package-sample-app.ps1
+
+      - name: Upload ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: sample-app
+          path: dist/sample-app.zip
+

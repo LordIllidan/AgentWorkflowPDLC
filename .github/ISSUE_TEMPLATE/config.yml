@@ -1,0 +1,6 @@
+blank_issues_enabled: true
+contact_links:
+  - name: PDLC Workflow Documentation
+    url: https://github.com/LordIllidan/AgentWorkflowPDLC/tree/main/docs
+    about: Read the workflow documentation before opening a PDLC task.
+
