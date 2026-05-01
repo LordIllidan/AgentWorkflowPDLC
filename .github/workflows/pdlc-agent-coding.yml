@@ -57,4 +57,5 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_URL: ${{ steps.create_pr.outputs.pr_url }}
-        run: gh issue comment "${{ github.event.issue.number }}" --body "Coding agent created pull request: $PR_URL"
+        run: |
+          gh issue comment "${{ github.event.issue.number }}" --body "Coding agent created pull request: $PR_URL"
