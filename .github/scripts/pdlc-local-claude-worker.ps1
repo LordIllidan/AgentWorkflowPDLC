@@ -126,11 +126,10 @@ $claudeArgs = @(
     "--permission-mode", "acceptEdits",
     "--output-format", "text",
     "--max-budget-usd", $budget,
-    "--allowedTools", $allowedTools,
-    $prompt
+    "--allowedTools", $allowedTools
 )
 
-$claudeOutput = & claude @claudeArgs
+$claudeOutput = $prompt | & claude @claudeArgs 2>&1
 $exitCode = $LASTEXITCODE
 $output = @"
 # Claude Code Worker Output
