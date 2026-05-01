@@ -16,7 +16,7 @@ import { classifyRisk, RiskSummary } from './risk-summary';
 
         <label>
           Wynik ryzyka
-          <input type="number" [value]="score()" (input)="setScore($event)" min="0" max="18">
+          <input type="number" [value]="score()" (input)="setScore($event)" min="0" max="100">
         </label>
 
         <div class="result">
