@@ -7,6 +7,9 @@ on:
       - edited
       - reopened
       - labeled
+  repository_dispatch:
+    types:
+      - pdlc_issue_created
 
 permissions:
   contents: read

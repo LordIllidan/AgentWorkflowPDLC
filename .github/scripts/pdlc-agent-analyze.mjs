@@ -122,7 +122,11 @@ async function upsertAnalysisComment(issue, body) {
 
 async function main() {
   const event = JSON.parse(await readFile(requireEnv("GITHUB_EVENT_PATH"), "utf8"));
-  const issue = event.issue;
+  let issue = event.issue;
+
+  if (!issue && event.client_payload?.issue_number) {
+    issue = await githubRequest(`/issues/${event.client_payload.issue_number}`);
+  }
 
   if (!issue || issue.pull_request) {
     console.log("No issue payload to analyze.");

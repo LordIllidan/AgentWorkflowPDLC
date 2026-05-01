@@ -160,6 +160,17 @@ async function main() {
     }),
   });
 
+  await githubRequest("/dispatches", {
+    method: "POST",
+    body: JSON.stringify({
+      event_type: "pdlc_issue_created",
+      client_payload: {
+        issue_number: issue.number,
+        source: "pdlc-research-agent",
+      },
+    }),
+  });
+
   console.log(`Created research issue #${issue.number}: ${issue.html_url}`);
 }
 
