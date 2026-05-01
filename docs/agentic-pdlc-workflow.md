@@ -2,7 +2,7 @@
 
 ## Goal
 
-This workflow turns a GitHub Issue into a controlled PDLC execution thread. Agents can draft analysis, requirements, architecture, implementation plans, code, tests, reviews, and documentation, but every stage advances only after a human manually approves the issue checklist.
+This workflow turns a GitHub Issue into a controlled PDLC execution thread. Agents can draft analysis, requirements, architecture, implementation plans, code, tests, reviews, and documentation, but important transitions remain human-approved.
 
 Business input and final business-facing artifacts may be written in Polish. Agent instructions, technical metadata, field names, commands, and workflow internals should stay in English.
 
@@ -10,6 +10,7 @@ Business input and final business-facing artifacts may be written in Polish. Age
 
 | Stage | Human approval means | Typical artifacts |
 |---|---|---|
+| Research | a generated feature proposal is worth intake | market or internal research note, proposed issue |
 | Intake | the task intent and missing information are clear | task brief, assumptions, open questions |
 | Risk Classification | risk class and required gates are accepted | risk card, approvers, required checks |
 | Requirements | product scope is accepted | user stories, acceptance criteria, out-of-scope |
@@ -21,6 +22,7 @@ Business input and final business-facing artifacts may be written in Polish. Age
 | Security | security review is accepted | SAST/SCA/secrets/IaC findings, exceptions |
 | Docs | documentation is accepted | feature docs, ADR updates, PR summary |
 | Release | release readiness is accepted | release notes, SBOM, rollback, monitoring |
+| Monitoring | post-merge signal is reviewed | deployment result, follow-up issue if needed |
 
 ## Agent Rules
 
@@ -31,6 +33,8 @@ Business input and final business-facing artifacts may be written in Polish. Age
 5. Every artifact referenced by a checkbox must be linked in the issue or pull request.
 6. If a stage has incomplete input, the agent should ask focused questions in Polish.
 7. The issue remains the audit thread for decisions, approvals, and links.
+8. The analysis-to-coding transition is approved with the issue comment `/approve analysis`.
+9. Release monitoring may create a new PDLC issue when a post-merge failure is detected.
 
 ## Issue State Model
 
@@ -43,6 +47,17 @@ The issue body contains a checklist with stable stage names. The GitHub Action p
 - final readiness status.
 
 The action posts or updates a single status comment marked with `<!-- pdlc-status -->`.
+
+## Automated MVP Loop
+
+The repository also contains a deterministic automation loop:
+
+- `PDLC Research Agent` creates proposal issues on schedule or manual dispatch.
+- `PDLC Agent Analysis` analyzes and splits new PDLC issues.
+- `PDLC Agent Coding` reacts to `/approve analysis`, creates a branch, writes artifacts, and opens a PR.
+- `PDLC Release Monitor` runs after a merged PR and creates follow-up issues when failure is signaled.
+
+Detailed operating notes are in `docs/automated-agent-loop.md`.
 
 ## Minimal Enterprise Controls
 
