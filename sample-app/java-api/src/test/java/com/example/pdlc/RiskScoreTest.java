@@ -20,5 +20,13 @@ class RiskScoreTest {
         assertEquals(10, score.total());
         assertEquals("high", score.riskClass());
     }
+
+    @Test
+    void classifiesCriticalRisk() {
+        RiskScore score = RiskScore.fromDimensions(15, 15, 15, 15, 15, 15);
+
+        assertEquals(90, score.total());
+        assertEquals("critical", score.riskClass());
+    }
 }
 

@@ -1,4 +1,4 @@
-export type RiskClass = 'low' | 'medium' | 'high' | 'regulated';
+export type RiskClass = 'low' | 'medium' | 'high' | 'regulated' | 'critical';
 
 export interface RiskSummary {
   readonly title: string;
@@ -7,6 +7,10 @@ export interface RiskSummary {
 }
 
 export function classifyRisk(score: number): RiskClass {
+  if (score >= 90) {
+    return 'critical';
+  }
+
   if (score >= 14) {
     return 'regulated';
   }
