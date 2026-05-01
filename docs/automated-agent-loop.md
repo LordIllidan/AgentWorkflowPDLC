@@ -58,7 +58,13 @@ To approve analysis and start implementation, comment on the issue:
 /approve analysis
 ```
 
-This is the only approval command implemented in the MVP. PR approval and merge remain normal GitHub human review steps.
+To route implementation to the local Claude Code worker running on the user's self-hosted Windows runner, comment:
+
+```text
+/approve ai-coding
+```
+
+PR approval and merge remain normal GitHub human review steps.
 
 ## Step 2: Coding Agent
 
@@ -66,7 +72,7 @@ Workflow: `.github/workflows/pdlc-agent-coding.yml`
 
 Trigger:
 
-- issue comment exactly equal to `/approve analysis`.
+- issue comment starting with `/approve analysis`.
 
 Output:
 
@@ -77,6 +83,24 @@ Output:
 - comment on the source issue with the PR URL.
 
 The sample app documentation change intentionally triggers `Sample App CI` on the PR.
+
+## Step 2b: Local Claude Code Worker
+
+Workflow: `.github/workflows/pdlc-claude-code-worker.yml`
+
+Trigger:
+
+- issue comment starting with `/approve ai-coding`.
+
+Output:
+
+- branch named `agent/claude-issue-<number>-<slug>-<run-id>`,
+- Claude Code prompt and output under `pdlc-runs/issue-<number>/`,
+- code changes produced by local Claude Code,
+- pull request linked to the source issue,
+- comment on the source issue with the PR URL.
+
+This path requires a GitHub self-hosted runner on the user's Windows workstation with the `pdlc-worker` label.
 
 ## Step 3: Release Monitor
 

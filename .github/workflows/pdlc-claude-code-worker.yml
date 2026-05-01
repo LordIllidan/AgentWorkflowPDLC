@@ -1,0 +1,53 @@
+name: PDLC Claude Code Worker
+
+on:
+  issue_comment:
+    types:
+      - created
+
+permissions:
+  actions: write
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  local-claude-code:
+    name: Run local Claude Code coding worker
+    runs-on:
+      - self-hosted
+      - Windows
+      - X64
+      - pdlc-worker
+    if: >
+      github.event.issue.pull_request == null &&
+      startsWith(github.event.comment.body, '/approve ai-coding')
+
+    steps:
+      - name: Checkout default branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+
+      - name: Verify local tools
+        shell: pwsh
+        run: |
+          git --version
+          gh --version
+          node --version
+          claude --version
+
+      - name: Run local Claude Code worker
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PDLC_CLAUDE_MODEL: ${{ vars.PDLC_CLAUDE_MODEL || 'sonnet' }}
+          PDLC_CLAUDE_MAX_BUDGET_USD: ${{ vars.PDLC_CLAUDE_MAX_BUDGET_USD || '3' }}
+        run: |
+          .\.github\scripts\pdlc-local-claude-worker.ps1 `
+            -IssueNumber ${{ github.event.issue.number }} `
+            -Repository "${{ github.repository }}" `
+            -BaseBranch "${{ github.event.repository.default_branch }}" `
+            -RunId "${{ github.run_id }}"
