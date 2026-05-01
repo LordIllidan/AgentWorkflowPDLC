@@ -28,6 +28,25 @@ function commandApproved(commentBody) {
   return commentBody.trim().toLowerCase() === "/approve analysis";
 }
 
+function includesCriticalRiskChange(issue) {
+  const text = `${issue.title ?? ""}\n${issue.body ?? ""}`.toLowerCase();
+  return text.includes("critical") && text.includes("risk");
+}
+
+async function replaceInFile(filePath, replacements) {
+  let content = await readFile(filePath, "utf8");
+
+  for (const [oldValue, newValue] of replacements) {
+    if (!content.includes(oldValue)) {
+      throw new Error(`Expected text not found in ${filePath}: ${oldValue}`);
+    }
+
+    content = content.replace(oldValue, newValue);
+  }
+
+  await writeFile(filePath, content);
+}
+
 function renderAnalysisArtifact(issue) {
   const body = issue.body ?? "";
 
@@ -109,6 +128,89 @@ This file is intentionally touched by the coding agent MVP so pull requests exer
   await writeFile(filePath, `${current.trimEnd()}\n${nextEntry}\n`);
 }
 
+async function applyCriticalRiskChange() {
+  await replaceInFile("sample-app/dotnet-api/Program.cs", [
+    [
+      `    {
+        >= 14 => "regulated",
+        >= 10 => "high",
+        >= 6 => "medium",
+        _ => "low"
+    };`,
+      `    {
+        >= 90 => "critical",
+        >= 14 => "regulated",
+        >= 10 => "high",
+        >= 6 => "medium",
+        _ => "low"
+    };`,
+    ],
+  ]);
+
+  await replaceInFile("sample-app/java-api/src/main/java/com/example/pdlc/RiskScore.java", [
+    [
+      `        if (total >= 14) {
+            return "regulated";
+        }`,
+      `        if (total >= 90) {
+            return "critical";
+        }
+        if (total >= 14) {
+            return "regulated";
+        }`,
+    ],
+  ]);
+
+  await replaceInFile("sample-app/java-api/src/test/java/com/example/pdlc/RiskScoreTest.java", [
+    [
+      `    @Test
+    void classifiesHighRisk() {
+        RiskScore score = RiskScore.fromDimensions(2, 2, 2, 2, 1, 1);
+
+        assertEquals(10, score.total());
+        assertEquals("high", score.riskClass());
+    }
+}`,
+      `    @Test
+    void classifiesHighRisk() {
+        RiskScore score = RiskScore.fromDimensions(2, 2, 2, 2, 1, 1);
+
+        assertEquals(10, score.total());
+        assertEquals("high", score.riskClass());
+    }
+
+    @Test
+    void classifiesCriticalRisk() {
+        RiskScore score = RiskScore.fromDimensions(15, 15, 15, 15, 15, 15);
+
+        assertEquals(90, score.total());
+        assertEquals("critical", score.riskClass());
+    }
+}`,
+    ],
+  ]);
+
+  await replaceInFile("sample-app/angular-frontend/src/app/risk-summary.ts", [
+    [`export type RiskClass = 'low' | 'medium' | 'high' | 'regulated';`, `export type RiskClass = 'low' | 'medium' | 'high' | 'regulated' | 'critical';`],
+    [
+      `  if (score >= 14) {
+    return 'regulated';
+  }`,
+      `  if (score >= 90) {
+    return 'critical';
+  }
+
+  if (score >= 14) {
+    return 'regulated';
+  }`,
+    ],
+  ]);
+
+  await replaceInFile("sample-app/angular-frontend/src/app/app.component.ts", [
+    [`          <input type="number" [value]="score()" (input)="setScore($event)" min="0" max="18">`, `          <input type="number" [value]="score()" (input)="setScore($event)" min="0" max="100">`],
+  ]);
+}
+
 async function writeOutput(name, value) {
   const outputPath = requireEnv("GITHUB_OUTPUT");
   await appendFile(outputPath, `${name}<<EOF\n${value}\nEOF\n`);
@@ -134,12 +236,17 @@ async function main() {
   await writeFile(path.join(runDirectory, "implementation-plan.md"), renderImplementationPlan(issue));
   await ensureGeneratedFeaturesDoc(issue);
 
+  const appliesCriticalRiskChange = includesCriticalRiskChange(issue);
+  if (appliesCriticalRiskChange) {
+    await applyCriticalRiskChange();
+  }
+
   const prTitle = `Agent implementation for issue #${issue.number}`;
   const prBody = `## Summary
 
 - Relates to #${issue.number}
 - Adds deterministic PDLC run artifacts for the approved analysis.
-- Updates the sample app documentation to trigger CI and prove the issue to PR loop.
+- ${appliesCriticalRiskChange ? "Implements critical risk classification in the .NET API, Java API, and Angular frontend." : "Updates the sample app documentation to trigger CI and prove the issue to PR loop."}
 
 ## Human approval trail
 

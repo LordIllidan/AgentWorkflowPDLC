@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     if: >
       github.event.issue.pull_request == null &&
-      github.event.comment.body == '/approve analysis'
+      startsWith(github.event.comment.body, '/approve analysis')
 
     steps:
       - name: Checkout default branch
@@ -40,7 +40,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git switch -c "$BRANCH_NAME"
-          git add pdlc-runs sample-app/docs
+          git add pdlc-runs sample-app
           git commit -m "$COMMIT_MESSAGE"
           git push -u origin "$BRANCH_NAME"
 
