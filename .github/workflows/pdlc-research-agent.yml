@@ -1,0 +1,31 @@
+name: PDLC Research Agent
+
+on:
+  schedule:
+    - cron: "0 7 * * 1"
+  workflow_dispatch:
+    inputs:
+      research_topic:
+        description: Optional research topic for a generated PDLC feature issue.
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  create-research-issue:
+    name: Create feature proposal issue
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create research issue
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RESEARCH_TOPIC: ${{ inputs.research_topic }}
+        run: node .github/scripts/pdlc-research-agent.mjs

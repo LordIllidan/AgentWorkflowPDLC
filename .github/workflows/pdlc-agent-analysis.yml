@@ -1,0 +1,30 @@
+name: PDLC Agent Analysis
+
+on:
+  issues:
+    types:
+      - opened
+      - edited
+      - reopened
+      - labeled
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  analyze-issue:
+    name: Analyze and split PDLC issue
+    runs-on: ubuntu-latest
+    if: github.event.issue.pull_request == null
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Analyze issue
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_EVENT_PATH: ${{ github.event_path }}
+        run: node .github/scripts/pdlc-agent-analyze.mjs
