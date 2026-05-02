@@ -250,6 +250,28 @@ function Test-StageBlockedByQuestions {
     return $Text -match "(?im)^\s*Status\s*:\s*BLOCKED_QUESTIONS\s*$"
 }
 
+function Test-StageArtifactQuality {
+    param(
+        [Parameter(Mandatory = $true)][string]$Text,
+        [Parameter(Mandatory = $true)][string]$StageKey
+    )
+
+    $trimmed = $Text.Trim()
+    if ([string]::IsNullOrWhiteSpace($trimmed)) {
+        return $false
+    }
+
+    if ($trimmed -match "(?im)^\s*(artifact written|summary\s*:)|artifact written to|artifact written\.") {
+        return $false
+    }
+
+    if ($StageKey -eq "risk") {
+        return $trimmed -match "(?im)^\s*Mode\s*:\s*(Developer|Semi-auto|Full-auto)\s*$" -and $trimmed.Length -ge 1000
+    }
+
+    return $trimmed -match "(?im)\A\s*Status\s*:\s*(READY|BLOCKED_QUESTIONS)\s*$" -and $trimmed.Length -ge 2000
+}
+
 function Get-AgentConfig {
     param(
         [Parameter(Mandatory = $true)][string]$AgentId,
@@ -654,10 +676,11 @@ Task:
 1. Produce a complete stage artifact for this issue, not a template, not a meta-summary, and not "artifact written to file".
 2. Use issue content, prior PR artifact files, and the agent base prompt.
 3. The full Markdown response will be written directly into $stagePath, so the response itself must contain all business and technical details.
-4. If this is autonomy risk assessment, choose exactly one mode and start the output with one of:
+4. If this is autonomy risk assessment, choose exactly one mode. The first non-empty line must be one of:
    Mode: Developer
    Mode: Semi-auto
    Mode: Full-auto
+   Then include Status: READY or Status: BLOCKED_QUESTIONS on the next line.
 5. Developer mode means a human developer should code the task because autonomy risk is too high.
 6. Semi-auto mode means humans drive the workflow by comments.
 7. Full-auto mode means agents may dispatch the next PDLC command after each successful stage.
@@ -698,6 +721,38 @@ $claudeOutputText = ($claudeOutput | ForEach-Object { $_.ToString() }) -join "`n
 if ($exitCode -ne 0) {
     gh issue comment $issue.number --repo $Repository --body "Local Claude stage worker failed. Run: $env:GITHUB_SERVER_URL/$Repository/actions/runs/$RunId"
     throw "Claude Code exited with code $exitCode."
+}
+
+if (-not (Test-StageArtifactQuality -Text $claudeOutputText -StageKey $stage.Key)) {
+    $retryPrompt = @"
+$prompt
+
+Previous response was rejected by the PDLC quality gate because it was not a complete artifact.
+
+Rejected response:
+~~~markdown
+$claudeOutputText
+~~~
+
+Rewrite the answer now as the complete Markdown artifact content.
+Do not say that an artifact was written.
+Do not summarize what would be in the artifact.
+Return the artifact body itself.
+"@
+
+    $retryOutput = $retryPrompt | & claude @claudeArgs 2>&1
+    $retryExitCode = $LASTEXITCODE
+    $claudeOutputText = ($retryOutput | ForEach-Object { $_.ToString() }) -join "`n"
+
+    if ($retryExitCode -ne 0) {
+        gh issue comment $issue.number --repo $Repository --body "Local Claude stage worker failed during artifact quality retry. Run: $env:GITHUB_SERVER_URL/$Repository/actions/runs/$RunId"
+        throw "Claude Code exited with code $retryExitCode during artifact quality retry."
+    }
+}
+
+if (-not (Test-StageArtifactQuality -Text $claudeOutputText -StageKey $stage.Key)) {
+    gh issue comment $issue.number --repo $Repository --body "PDLC stage '$($stage.Key)' stopped because the generated artifact did not pass the quality gate. Run: $env:GITHUB_SERVER_URL/$Repository/actions/runs/$RunId"
+    throw "Generated $($stage.Key) artifact did not pass the quality gate."
 }
 
 $mode = if ($stage.Key -eq "risk") { Get-AutonomyModeFromText -Text $claudeOutputText } else { Get-AutonomyModeFromIssue -IssueNumber $issue.number }
