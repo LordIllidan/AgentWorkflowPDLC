@@ -55,11 +55,11 @@ function Get-EventPullRequestNumber {
 
 function ConvertTo-MarkdownList {
     param(
-        [Parameter(Mandatory = $true)]$Items,
+        $Items,
         [Parameter(Mandatory = $true)][scriptblock]$Formatter
     )
 
-    if (-not $Items -or $Items.Count -eq 0) {
+    if ($null -eq $Items -or $Items.Count -eq 0) {
         return "No items found."
     }
 
