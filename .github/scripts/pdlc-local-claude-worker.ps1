@@ -57,6 +57,23 @@ function Write-Utf8File {
     [System.IO.File]::WriteAllText($fullPath, $Content, [System.Text.UTF8Encoding]::new($false))
 }
 
+function Invoke-Checked {
+    param(
+        [Parameter(Mandatory = $true)][string]$Command,
+        [Parameter(ValueFromRemainingArguments = $true)][string[]]$Arguments
+    )
+
+    & $Command @Arguments
+    if ($LASTEXITCODE -ne 0) {
+        throw "Command failed with exit code ${LASTEXITCODE}: ${Command} $($Arguments -join ' ')"
+    }
+}
+
+function Enable-LocalGitCredentialsForPush {
+    git config --local --unset-all "http.https://github.com/.extraheader" 2>$null
+    $env:GIT_TERMINAL_PROMPT = "0"
+}
+
 Require-Command "git"
 Require-Command "gh"
 Require-Command "claude"
@@ -75,8 +92,8 @@ $runDirectory = "pdlc-runs/issue-$IssueNumber"
 $promptPath = Join-Path $runDirectory "claude-code-prompt.md"
 $outputPath = Join-Path $runDirectory "claude-code-output.md"
 
-git fetch origin $BaseBranch
-git switch -c $branchName "origin/$BaseBranch"
+Invoke-Checked "git" "fetch" "origin" $BaseBranch
+Invoke-Checked "git" "switch" "-c" $branchName "origin/$BaseBranch"
 
 $prompt = @"
 You are the PDLC Coding Agent running locally on the user's Windows workstation through a GitHub self-hosted runner.
@@ -158,9 +175,10 @@ if (-not $changes) {
     throw "Claude Code produced no file changes."
 }
 
-git add .
-git commit -m "Implement Claude Code work for issue #$IssueNumber"
-git push -u origin $branchName
+Invoke-Checked "git" "add" "."
+Invoke-Checked "git" "commit" "-m" "Implement Claude Code work for issue #$IssueNumber"
+Enable-LocalGitCredentialsForPush
+Invoke-Checked "git" "push" "-u" "origin" $branchName
 
 $prBody = @"
 ## Summary
@@ -183,7 +201,10 @@ $prBodyPath = ".pdlc-local-claude-pr-body.md"
 Write-Utf8File -Path $prBodyPath -Content $prBody
 
 $prUrl = gh pr create --repo $Repository --title "Claude Code implementation for issue #$IssueNumber" --body-file $prBodyPath --head $branchName --base $BaseBranch
-gh issue comment $IssueNumber --repo $Repository --body "Local Claude Code worker created pull request: $prUrl"
-gh workflow run sample-app-ci.yml --repo $Repository --ref $branchName
+if ($LASTEXITCODE -ne 0) {
+    throw "Failed to create pull request for branch $branchName."
+}
+Invoke-Checked "gh" "issue" "comment" "$IssueNumber" "--repo" $Repository "--body" "Local Claude Code worker created pull request: $prUrl"
+Invoke-Checked "gh" "workflow" "run" "sample-app-ci.yml" "--repo" $Repository "--ref" $branchName
 
 Write-Output "Created pull request: $prUrl"

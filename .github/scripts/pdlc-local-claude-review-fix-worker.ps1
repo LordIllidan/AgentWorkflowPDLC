@@ -39,6 +39,23 @@ function Write-Utf8File {
     [System.IO.File]::WriteAllText($fullPath, $Content, [System.Text.UTF8Encoding]::new($false))
 }
 
+function Invoke-Checked {
+    param(
+        [Parameter(Mandatory = $true)][string]$Command,
+        [Parameter(ValueFromRemainingArguments = $true)][string[]]$Arguments
+    )
+
+    & $Command @Arguments
+    if ($LASTEXITCODE -ne 0) {
+        throw "Command failed with exit code ${LASTEXITCODE}: ${Command} $($Arguments -join ' ')"
+    }
+}
+
+function Enable-LocalGitCredentialsForPush {
+    git config --local --unset-all "http.https://github.com/.extraheader" 2>$null
+    $env:GIT_TERMINAL_PROMPT = "0"
+}
+
 function Get-EventPullRequestNumber {
     param([Parameter(Mandatory = $true)]$Event)
 
@@ -107,9 +124,9 @@ $runDirectory = "pdlc-runs/pr-$prNumber"
 $promptPath = Join-Path $runDirectory "claude-review-fix-prompt-$RunId.md"
 $outputPath = Join-Path $runDirectory "claude-review-fix-output-$RunId.md"
 
-git fetch origin $($pr.baseRefName)
-git fetch origin "$($pr.headRefName):refs/remotes/origin/$($pr.headRefName)"
-git switch -C $($pr.headRefName) "origin/$($pr.headRefName)"
+Invoke-Checked "git" "fetch" "origin" $($pr.baseRefName)
+Invoke-Checked "git" "fetch" "origin" "$($pr.headRefName):refs/remotes/origin/$($pr.headRefName)"
+Invoke-Checked "git" "switch" "-C" $($pr.headRefName) "origin/$($pr.headRefName)"
 
 $prompt = @"
 You are the PDLC Review Fix Agent running locally on the user's Windows workstation through a GitHub self-hosted runner.
@@ -209,9 +226,10 @@ if (-not $changes) {
     throw "Claude Code produced no file changes."
 }
 
-git add .
-git commit -m "Address Claude review feedback on PR #$prNumber"
-git push origin "HEAD:$($pr.headRefName)"
+Invoke-Checked "git" "add" "."
+Invoke-Checked "git" "commit" "-m" "Address Claude review feedback on PR #$prNumber"
+Enable-LocalGitCredentialsForPush
+Invoke-Checked "git" "push" "origin" "HEAD:$($pr.headRefName)"
 
 $commentBody = @"
 Local Claude review-fix worker pushed changes to this PR.
@@ -221,7 +239,7 @@ Local Claude review-fix worker pushed changes to this PR.
 - CI dispatch: `sample-app-ci.yml`
 "@
 
-gh pr comment $prNumber --repo $Repository --body $commentBody
-gh workflow run sample-app-ci.yml --repo $Repository --ref $($pr.headRefName)
+Invoke-Checked "gh" "pr" "comment" "$prNumber" "--repo" $Repository "--body" $commentBody
+Invoke-Checked "gh" "workflow" "run" "sample-app-ci.yml" "--repo" $Repository "--ref" $($pr.headRefName)
 
 Write-Output "Pushed review fixes to PR #$prNumber."
