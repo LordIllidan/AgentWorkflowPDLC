@@ -214,7 +214,7 @@ git push origin "HEAD:$($pr.headRefName)"
 $commentBody = @"
 Local Claude review-fix worker pushed changes to this PR.
 
-- Worker output: `$outputPath`
+- Worker output: `$($outputPath)`
 - Run: $env:GITHUB_SERVER_URL/$Repository/actions/runs/$RunId
 - CI dispatch: `sample-app-ci.yml`
 "@

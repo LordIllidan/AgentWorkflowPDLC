@@ -167,7 +167,7 @@ $prBody = @"
 
 - Relates to #$IssueNumber
 - Implemented by local Claude Code worker running on a GitHub self-hosted runner.
-- Worker output: `$outputPath`
+- Worker output: `$($outputPath)`
 
 ## Human approval trail
 
