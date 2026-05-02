@@ -81,6 +81,19 @@ function Test-IsPullRequestIssue {
     return @($Issue.PSObject.Properties.Name) -contains "pull_request"
 }
 
+function Test-ObjectProperty {
+    param(
+        $Object,
+        [Parameter(Mandatory = $true)][string]$Name
+    )
+
+    if (-not $Object) {
+        return $false
+    }
+
+    return @($Object.PSObject.Properties.Name) -contains $Name
+}
+
 function Get-StageDefinition {
     param(
         [Parameter(Mandatory = $true)][string]$Command,
@@ -160,9 +173,9 @@ function Get-IssueFromRepository {
 function Get-StageRequest {
     param($EventPayload)
 
-    $defaultBranch = if ($EventPayload.repository.default_branch) { $EventPayload.repository.default_branch } else { "main" }
+    $defaultBranch = if ((Test-ObjectProperty -Object $EventPayload -Name "repository") -and (Test-ObjectProperty -Object $EventPayload.repository -Name "default_branch")) { $EventPayload.repository.default_branch } else { "main" }
 
-    if ($EventPayload.action -eq "pdlc_stage_command") {
+    if ($EventPayload.action -eq "pdlc_stage_command" -and (Test-ObjectProperty -Object $EventPayload -Name "client_payload")) {
         $issueNumber = [int]$EventPayload.client_payload.issue_number
         $command = [string]$EventPayload.client_payload.command
         $issue = Get-IssueFromRepository -IssueNumber $issueNumber
@@ -176,9 +189,14 @@ function Get-StageRequest {
         }
     }
 
-    if ($EventPayload.issue -and -not $EventPayload.comment -and $EventPayload.action -eq "opened") {
+    $hasIssue = Test-ObjectProperty -Object $EventPayload -Name "issue"
+    $hasComment = Test-ObjectProperty -Object $EventPayload -Name "comment"
+
+    if ($hasIssue -and -not $hasComment -and $EventPayload.action -eq "opened") {
+        $issue = Get-IssueFromRepository -IssueNumber ([int]$EventPayload.issue.number)
+
         return [pscustomobject]@{
-            Issue = $EventPayload.issue
+            Issue = $issue
             Command = "/pdlc risk"
             HumanComment = "Issue opened. Run initial autonomy risk assessment."
             DefaultBranch = $defaultBranch
@@ -186,7 +204,7 @@ function Get-StageRequest {
         }
     }
 
-    if ($EventPayload.issue -and $EventPayload.comment) {
+    if ($hasIssue -and $hasComment) {
         if (Test-IsPullRequestIssue -Issue $EventPayload.issue) {
             Write-Output "No normal issue comment event to process."
             exit 0
