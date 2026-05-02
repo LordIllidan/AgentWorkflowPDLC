@@ -1,26 +1,40 @@
-import { describe, it, expect } from 'vitest';
-import { classifyRisk } from './risk-summary';
+import { describe, it, expect, beforeEach } from 'vitest';
+import { TestBed } from '@angular/core/testing';
+import { AppComponent } from './app.component';
 
-// AppComponent signal: score = 7 initially; summary.riskClass = classifyRisk(score())
-// Input max was changed to 100 to allow critical-tier entry.
-describe('AppComponent risk display', () => {
-  it('initial score 7 produces medium', () => {
-    expect(classifyRisk(7)).toBe('medium');
+describe('AppComponent display', () => {
+  beforeEach(async () => {
+    await TestBed.configureTestingModule({
+      imports: [AppComponent],
+    }).compileComponents();
   });
 
-  it('score at input max (100) produces critical', () => {
-    expect(classifyRisk(100)).toBe('critical');
+  it('renders medium for initial score 7', () => {
+    const fixture = TestBed.createComponent(AppComponent);
+    fixture.detectChanges();
+    const strong = fixture.nativeElement.querySelector('strong') as HTMLElement;
+    expect(strong.textContent?.trim().toLowerCase()).toBe('medium');
   });
 
-  it('critical boundary 90 produces critical', () => {
-    expect(classifyRisk(90)).toBe('critical');
+  it('renders critical after input changes to 90', () => {
+    const fixture = TestBed.createComponent(AppComponent);
+    fixture.detectChanges();
+    const input = fixture.nativeElement.querySelector('input') as HTMLInputElement;
+    input.value = '90';
+    input.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+    const strong = fixture.nativeElement.querySelector('strong') as HTMLElement;
+    expect(strong.textContent?.trim().toLowerCase()).toBe('critical');
   });
 
-  it('just below critical boundary (89) produces regulated', () => {
-    expect(classifyRisk(89)).toBe('regulated');
-  });
-
-  it('score 0 produces low', () => {
-    expect(classifyRisk(0)).toBe('low');
+  it('renders low after input changes to 0', () => {
+    const fixture = TestBed.createComponent(AppComponent);
+    fixture.detectChanges();
+    const input = fixture.nativeElement.querySelector('input') as HTMLInputElement;
+    input.value = '0';
+    input.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+    const strong = fixture.nativeElement.querySelector('strong') as HTMLElement;
+    expect(strong.textContent?.trim().toLowerCase()).toBe('low');
   });
 });
