@@ -42,11 +42,13 @@ function Write-Utf8File {
 function Get-EventPullRequestNumber {
     param([Parameter(Mandatory = $true)]$Event)
 
-    if ($Event.issue -and $Event.issue.pull_request) {
+    $propertyNames = @($Event.PSObject.Properties.Name)
+
+    if ($propertyNames -contains "issue" -and $Event.issue.pull_request) {
         return [int]$Event.issue.number
     }
 
-    if ($Event.pull_request) {
+    if ($propertyNames -contains "pull_request" -and $Event.pull_request) {
         return [int]$Event.pull_request.number
     }
 
@@ -214,7 +216,7 @@ git push origin "HEAD:$($pr.headRefName)"
 $commentBody = @"
 Local Claude review-fix worker pushed changes to this PR.
 
-- Worker output: `$($outputPath)`
+- Worker output: ``$outputPath``
 - Run: $env:GITHUB_SERVER_URL/$Repository/actions/runs/$RunId
 - CI dispatch: `sample-app-ci.yml`
 "@
