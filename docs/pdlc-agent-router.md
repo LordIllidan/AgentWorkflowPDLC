@@ -14,8 +14,11 @@ Router ogranicza to do jednego runu `PDLC Agent Router`.
 
 | Event | Warunek | Job |
 |---|---|---|
-| `issues` | zwykłe issue | `issue-status`, `issue-analysis` |
-| `repository_dispatch` | `pdlc_issue_created` | `issue-analysis` |
+| `issues` | nowe zwykłe issue | `issue-status`, `risk-assessment` |
+| `issues` | edycja lub reopen zwykłego issue | `issue-status`, `issue-analysis` |
+| `repository_dispatch` | `pdlc_issue_created` | `risk-assessment` |
+| `repository_dispatch` | `pdlc_stage_command` z komendą stage | `stage-agent` |
+| `repository_dispatch` | `pdlc_stage_command` z `/approve ai-coding` | `local-coding` |
 | `issue_comment` | `/pdlc research`, `/pdlc analyze`, `/pdlc risk`, `/pdlc architecture`, `/pdlc plan` | `stage-agent` |
 | `issue_comment` | `/approve analysis` | `deterministic-coding` |
 | `issue_comment` | `/approve ai-coding` | `local-coding` |
@@ -32,3 +35,5 @@ Router ogranicza to do jednego runu `PDLC Agent Router`.
 ## Zasada
 
 Router decyduje, który agent działa w danym momencie. Agenci wykonawczy nie nasłuchują już bezpośrednio na eventy GitHuba jako osobne workflowy.
+
+Nowe issue zawsze przechodzi przez ocenę ryzyka autonomii. Tryb `pdlc-mode:full-auto` używa `repository_dispatch`, ponieważ komentarze utworzone przez `GITHUB_TOKEN` nie są pewnym mechanizmem odpalania kolejnych workflowów.

@@ -33,6 +33,7 @@ function routeEvent(eventName, event) {
   const route = {
     status: false,
     analysis: false,
+    riskAssessment: false,
     stage: false,
     deterministicCoding: false,
     localCoding: false,
@@ -41,8 +42,26 @@ function routeEvent(eventName, event) {
   };
 
   if (eventName === "repository_dispatch" && event.action === "pdlc_issue_created") {
-    route.analysis = true;
-    route.reason = "Research-created issue dispatch should run analysis.";
+    route.riskAssessment = true;
+    route.reason = "Research-created issue dispatch should run autonomy risk assessment.";
+    return route;
+  }
+
+  if (eventName === "repository_dispatch" && event.action === "pdlc_stage_command") {
+    const command = event.client_payload?.command ?? "";
+    if (startsWithAny(command, stageCommands)) {
+      route.stage = true;
+      route.reason = "Repository dispatch requested a PDLC stage agent.";
+      return route;
+    }
+
+    if (command.trim().toLowerCase().startsWith("/approve ai-coding")) {
+      route.localCoding = true;
+      route.reason = "Repository dispatch approved local Claude Code implementation.";
+      return route;
+    }
+
+    route.reason = "Repository dispatch did not contain a supported PDLC command.";
     return route;
   }
 
@@ -53,6 +72,12 @@ function routeEvent(eventName, event) {
     }
 
     route.status = true;
+    if (event.action === "opened") {
+      route.riskAssessment = true;
+      route.reason = "New issue should refresh status and run autonomy risk assessment.";
+      return route;
+    }
+
     route.analysis = true;
     route.reason = "Normal issue lifecycle event should refresh status and analysis.";
     return route;

@@ -14,6 +14,8 @@ The current version is intentionally lightweight but now supports an automated i
 - Humans can use `/fix-review` on a PR to run the local Claude Code review-fix worker.
 - Claude Code workers fetch specialist agent prompts from `AgentWorkflowPDLC-AgentConfig` at startup.
 - Humans can drive separate PDLC stages with `/pdlc research`, `/pdlc analyze`, `/pdlc risk`, `/pdlc architecture`, and `/pdlc plan`.
+- A new issue first runs autonomy risk assessment and receives one of three labels: `pdlc-mode:developer`, `pdlc-mode:semi-auto`, or `pdlc-mode:full-auto`.
+- Stage agents maintain one long-lived PR per issue and write spec artifacts into `pdlc-runs/issue-<number>/`.
 - Pull requests link back to the issue and must include generated artifacts.
 - The release monitor runs after merge and can create follow-up issues.
 
@@ -81,6 +83,7 @@ docs/
   external-agent-config-repository.md
   pdlc-agent-router.md
   pdlc-command-driven-stage-agents.md
+  pdlc-spec-artifacts-in-pr.md
   pr-workflow-test-scenario.md
 ```
 
@@ -102,4 +105,5 @@ See `docs/local-claude-review-fix-worker.md` for review feedback fixes.
 See `docs/external-agent-config-repository.md` for fetched agent configuration.
 See `docs/pdlc-agent-router.md` for centralized GitHub event routing.
 See `docs/pdlc-command-driven-stage-agents.md` for staged GitHub issue commands.
+See `docs/pdlc-spec-artifacts-in-pr.md` for PR-visible spec artifacts.
 

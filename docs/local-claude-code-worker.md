@@ -75,15 +75,18 @@ The worker uses local Claude Code authentication already configured on the works
 
 Before calling Claude Code, the worker clones the configured agent repository, reads `agents/manifest.json`, and injects available specialist prompts into the task prompt. Claude Code then chooses the relevant agents, for example Angular, Java, .NET, review, or security.
 
-The worker also collects prior PDLC stage artifacts from issue comments marked by:
+The worker reads prior PDLC stage artifacts from the long-lived PR branch:
 
 ```text
-<!-- pdlc-stage-research -->
-<!-- pdlc-stage-analysis -->
-<!-- pdlc-stage-risk -->
-<!-- pdlc-stage-architecture -->
-<!-- pdlc-stage-plan -->
+pdlc-runs/issue-<number>/00-issue.md
+pdlc-runs/issue-<number>/05-autonomy-risk.md
+pdlc-runs/issue-<number>/10-research.md
+pdlc-runs/issue-<number>/20-analysis.md
+pdlc-runs/issue-<number>/40-architecture.md
+pdlc-runs/issue-<number>/50-plan.md
 ```
+
+The implementation worker continues the same PR and writes `pdlc-runs/issue-<number>/60-implementation.md`.
 
 See `docs/external-agent-config-repository.md`.
 

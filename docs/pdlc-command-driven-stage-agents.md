@@ -44,9 +44,10 @@ Skrypt `.github/scripts/pdlc-local-claude-stage-worker.ps1`:
 
 - wykrywa komendę `/pdlc ...`,
 - pobiera prompt agenta z `AgentWorkflowPDLC-AgentConfig`,
-- zbiera wcześniejsze artefakty PDLC z komentarzy issue,
+- znajduje albo tworzy długowieczny PR dla issue,
+- zbiera wcześniejsze artefakty PDLC z plików w branchu PR,
 - uruchamia lokalne `claude --print`,
-- publikuje lub aktualizuje komentarz danego etapu.
+- zapisuje artefakt etapu jako commit w tym samym PR.
 
 ## Agenci
 
@@ -58,17 +59,9 @@ Skrypt `.github/scripts/pdlc-local-claude-stage-worker.ps1`:
 
 ## Artefakty
 
-Komentarze agentów mają markery HTML:
+Komentarze użytkownika są kanałem sterowania procesem. Artefakty agentów nie są już transportowane komentarzami. Każdy stage worker znajduje albo tworzy długowieczny PR powiązany z issue i zapisuje wynik jako plik w `pdlc-runs/issue-<number>/`.
 
-```text
-<!-- pdlc-stage-research -->
-<!-- pdlc-stage-analysis -->
-<!-- pdlc-stage-risk -->
-<!-- pdlc-stage-architecture -->
-<!-- pdlc-stage-plan -->
-```
-
-Markery pozwalają workerom zebrać wcześniejsze artefakty bez zgadywania, które komentarze są częścią procesu.
+W `pdlc-mode:semi-auto` człowiek wpisuje kolejne komendy. W `pdlc-mode:full-auto` agent po udanym etapie komentuje status i wysyła `repository_dispatch` z następną komendą, żeby kolejny etap uruchomił się automatycznie.
 
 ## Integracja Z Repo Konfiguracji
 

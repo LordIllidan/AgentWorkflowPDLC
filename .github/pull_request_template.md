@@ -15,11 +15,13 @@ Refs #
 
 ## PDLC Artifacts
 
-- Intake:
-- Risk card:
-- Requirements / acceptance criteria:
-- Architecture / ADR:
-- Implementation plan:
+- Issue context: `pdlc-runs/issue-<number>/00-issue.md`
+- Autonomy risk: `pdlc-runs/issue-<number>/05-autonomy-risk.md`
+- Research: `pdlc-runs/issue-<number>/10-research.md`
+- Analysis: `pdlc-runs/issue-<number>/20-analysis.md`
+- Architecture: `pdlc-runs/issue-<number>/40-architecture.md`
+- Plan: `pdlc-runs/issue-<number>/50-plan.md`
+- Implementation: `pdlc-runs/issue-<number>/60-implementation.md`
 - QA report:
 - Security review:
 - Documentation:

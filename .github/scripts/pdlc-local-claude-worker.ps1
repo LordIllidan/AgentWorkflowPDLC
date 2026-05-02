@@ -15,7 +15,7 @@ param(
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
-function Require-Command {
+function Test-RequiredCommand {
     param([Parameter(Mandatory = $true)][string]$Name)
 
     $command = Get-Command $Name -ErrorAction SilentlyContinue
@@ -74,24 +74,6 @@ function Enable-LocalGitCredentialsForPush {
     $env:GIT_TERMINAL_PROMPT = "0"
 }
 
-function ConvertTo-PdlcArtifactMarkdown {
-    param($Comments)
-
-    $artifactComments = @(
-        $Comments | Where-Object {
-            $_.body -like "*<!-- pdlc-stage-*" -or $_.body -like "*<!-- pdlc-agent-analysis -->*"
-        } | Sort-Object created_at
-    )
-
-    if ($artifactComments.Count -eq 0) {
-        return "No prior PDLC stage artifacts were found."
-    }
-
-    return (($artifactComments | ForEach-Object {
-        "Author: $($_.user.login)`nCreated: $($_.created_at)`n`n$($_.body)"
-    }) -join "`n`n---`n`n")
-}
-
 function Get-AgentConfigContext {
     param(
         [Parameter(Mandatory = $true)][string]$RunId,
@@ -107,8 +89,8 @@ function Get-AgentConfigContext {
         Remove-Item -Recurse -Force -LiteralPath $cachePath
     }
 
-    Invoke-Checked "gh" "repo" "clone" $configRepo $cachePath
-    Invoke-Checked "git" "-C" $cachePath "checkout" $configRef
+    Invoke-Checked "gh" "repo" "clone" $configRepo $cachePath | Out-Null
+    Invoke-Checked "git" "-C" $cachePath "checkout" $configRef | Out-Null
 
     $manifestPath = Join-Path $cachePath "agents/manifest.json"
     $workerPolicyPath = Join-Path $cachePath "worker/worker-policy.md"
@@ -125,32 +107,32 @@ function Get-AgentConfigContext {
         @"
 ### $relativePath
 
-```markdown
+~~~markdown
 $(Get-Content -Raw -LiteralPath $file.FullName)
-```
+~~~
 "@
     }
 
     return @"
 # External Agent Configuration
 
-Repository: `$configRepo`
-Ref: `$configRef`
-Purpose: `$Purpose`
+Repository: $configRepo
+Ref: $configRef
+Purpose: $Purpose
 
 The worker fetched this configuration at startup. Use the manifest to select the smallest useful set of specialist agents, then apply their prompts while implementing the task.
 
 ## Worker Policy
 
-```markdown
+~~~markdown
 $workerPolicy
-```
+~~~
 
 ## Agent Manifest
 
-```json
+~~~json
 $manifest
-```
+~~~
 
 ## Available Agent Prompts
 
@@ -158,28 +140,157 @@ $($agentPrompts -join "`n")
 "@
 }
 
-Require-Command "git"
-Require-Command "gh"
-Require-Command "claude"
+function Get-PdlcPullRequestForIssue {
+    param([Parameter(Mandatory = $true)][int]$IssueNumber)
+
+    $prs = @(gh pr list --repo $Repository --state open --limit 100 --json number,url,headRefName,title,body | ConvertFrom-Json)
+    return @(
+        $prs | Where-Object {
+            $_.headRefName -like "agent/pdlc-issue-$IssueNumber-*" -or
+            $_.title -like "*issue #$IssueNumber*" -or
+            $_.body -like "*#$IssueNumber*"
+        }
+    ) | Select-Object -First 1
+}
+
+function Write-IssueContextFile {
+    param(
+        [Parameter(Mandatory = $true)]$Issue,
+        [Parameter(Mandatory = $true)][string]$RunDirectory
+    )
+
+    $issuePath = Join-Path $RunDirectory "00-issue.md"
+    if (Test-Path -LiteralPath $issuePath) {
+        return
+    }
+
+    $content = @"
+# PDLC Issue Context
+
+Issue: #$($Issue.number) $($Issue.title)
+URL: $($Issue.url)
+
+## Body
+
+~~~markdown
+$($Issue.body)
+~~~
+"@
+
+    Write-Utf8File -Path $issuePath -Content $content
+}
+
+function Get-PdlcArtifactContext {
+    param([Parameter(Mandatory = $true)][string]$RunDirectory)
+
+    if (-not (Test-Path -LiteralPath $RunDirectory)) {
+        return "No PDLC artifacts exist yet."
+    }
+
+    $files = @(Get-ChildItem -LiteralPath $RunDirectory -Filter "*.md" | Sort-Object Name)
+    if ($files.Count -eq 0) {
+        return "No PDLC artifacts exist yet."
+    }
+
+    return (($files | ForEach-Object {
+        @"
+## $($_.Name)
+
+~~~markdown
+$(Get-Content -Raw -LiteralPath $_.FullName)
+~~~
+"@
+    }) -join "`n`n---`n`n")
+}
+
+function Initialize-PdlcBranch {
+    param(
+        [Parameter(Mandatory = $true)]$Issue,
+        [Parameter(Mandatory = $true)][string]$BaseBranch
+    )
+
+    $existingPr = Get-PdlcPullRequestForIssue -IssueNumber $Issue.number
+    if ($existingPr) {
+        Invoke-Checked "git" "fetch" "origin" $existingPr.headRefName
+        Invoke-Checked "git" "switch" "-C" $existingPr.headRefName "origin/$($existingPr.headRefName)"
+
+        return [pscustomobject]@{
+            BranchName = $existingPr.headRefName
+            PrUrl = $existingPr.url
+            HasExistingPr = $true
+        }
+    }
+
+    $slug = ConvertTo-Slug -Value $Issue.title
+    $branchName = "agent/pdlc-issue-$($Issue.number)-$slug"
+
+    Invoke-Checked "git" "fetch" "origin" $BaseBranch
+    Invoke-Checked "git" "switch" "-c" $branchName "origin/$BaseBranch"
+
+    return [pscustomobject]@{
+        BranchName = $branchName
+        PrUrl = $null
+        HasExistingPr = $false
+    }
+}
+
+function New-PdlcPullRequest {
+    param(
+        [Parameter(Mandatory = $true)]$Issue,
+        [Parameter(Mandatory = $true)][string]$BranchName,
+        [Parameter(Mandatory = $true)][string]$BaseBranch,
+        [Parameter(Mandatory = $true)][string]$RunDirectory
+    )
+
+    $body = @"
+## Summary
+
+- Relates to #$($Issue.number)
+- Long-lived PDLC pull request.
+- PDLC context directory: ``$RunDirectory``
+
+## PDLC Flow
+
+- Autonomy risk: ``$RunDirectory/05-autonomy-risk.md``
+- Research: ``$RunDirectory/10-research.md``
+- Analysis: ``$RunDirectory/20-analysis.md``
+- Architecture: ``$RunDirectory/40-architecture.md``
+- Plan: ``$RunDirectory/50-plan.md``
+- Implementation: ``$RunDirectory/60-implementation.md``
+
+## Review
+
+Review this PR as the single source of truth for the issue lifecycle. Issue comments are only control/status messages.
+"@
+
+    $bodyPath = ".pdlc-local-claude-pr-body.md"
+    Write-Utf8File -Path $bodyPath -Content $body
+
+    $prUrl = gh pr create --repo $Repository --title "PDLC workflow for issue #$($Issue.number)" --body-file $bodyPath --head $BranchName --base $BaseBranch
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to create pull request for branch $BranchName."
+    }
+
+    return $prUrl
+}
+
+Test-RequiredCommand "git"
+Test-RequiredCommand "gh"
+Test-RequiredCommand "claude"
 
 $model = if ($env:PDLC_CLAUDE_MODEL) { $env:PDLC_CLAUDE_MODEL } else { "sonnet" }
 $budget = if ($env:PDLC_CLAUDE_MAX_BUDGET_USD) { $env:PDLC_CLAUDE_MAX_BUDGET_USD } else { "3" }
 
 $issue = gh issue view $IssueNumber --repo $Repository --json number,title,body,url,labels | ConvertFrom-Json
-$comments = gh api "repos/$Repository/issues/$IssueNumber/comments?per_page=100" | ConvertFrom-Json
-$analysisComment = $comments | Where-Object { $_.body -like "*<!-- pdlc-agent-analysis -->*" } | Select-Object -Last 1
-$analysisBody = if ($analysisComment) { $analysisComment.body } else { "No prior analysis comment was found." }
-$stageArtifacts = ConvertTo-PdlcArtifactMarkdown -Comments $comments
-$agentConfigContext = Get-AgentConfigContext -RunId $RunId -Purpose "issue-coding"
-
-$slug = ConvertTo-Slug -Value $issue.title
-$branchName = "agent/claude-issue-$IssueNumber-$slug-$RunId"
 $runDirectory = "pdlc-runs/issue-$IssueNumber"
 $promptPath = Join-Path $runDirectory "claude-code-prompt.md"
 $outputPath = Join-Path $runDirectory "claude-code-output.md"
+$implementationPath = Join-Path $runDirectory "60-implementation.md"
 
-Invoke-Checked "git" "fetch" "origin" $BaseBranch
-Invoke-Checked "git" "switch" "-c" $branchName "origin/$BaseBranch"
+$agentConfigContext = Get-AgentConfigContext -RunId $RunId -Purpose "issue-coding"
+$branchContext = Initialize-PdlcBranch -Issue $issue -BaseBranch $BaseBranch
+Write-IssueContextFile -Issue $issue -RunDirectory $runDirectory
+$artifactContext = Get-PdlcArtifactContext -RunDirectory $runDirectory
 
 $prompt = @"
 You are the PDLC Coding Agent running locally on the user's Windows workstation through a GitHub self-hosted runner.
@@ -193,38 +304,30 @@ Source GitHub issue:
 - Issue: #$($issue.number)
 - URL: $($issue.url)
 - Title: $($issue.title)
+- Long-lived PR branch: $($branchContext.BranchName)
 
-Issue body:
-```markdown
-$($issue.body)
-```
-
-PDLC analysis comment:
-```markdown
-$analysisBody
-```
-
-PDLC stage artifacts:
-```markdown
-$stageArtifacts
-```
+PDLC artifact files from the PR branch:
+~~~markdown
+$artifactContext
+~~~
 
 Fetched agent configuration:
-```markdown
+~~~markdown
 $agentConfigContext
-```
+~~~
 
 Task:
-1. Implement the requested code change in this repository.
-2. Keep changes scoped to the issue.
-3. Add or update focused tests when the code change affects behavior.
-4. Add or update documentation only when needed for this feature.
-5. Do not merge, do not push, and do not create a pull request. The wrapper script will commit, push, and create the PR.
-6. Do not read or print secrets.
-7. Avoid destructive git commands.
-8. Before finishing, inspect the diff and leave the workspace ready to commit.
-9. State which external agent configuration and specialist agents you used.
-10. Use the PDLC stage artifacts as the primary source of scope, risk, architecture, and implementation plan.
+1. Continue the existing long-lived PDLC PR for this issue.
+2. Implement the requested code change in this repository.
+3. Use pdlc-runs/issue-$IssueNumber/ as the primary source of scope, risk, architecture, and implementation plan.
+4. Keep changes scoped to the issue.
+5. Add or update focused tests when the code change affects behavior.
+6. Add or update documentation only when needed for this feature.
+7. Do not merge, do not push, and do not create a pull request. The wrapper script will commit, push, and create a PR only if one does not exist.
+8. Do not read or print secrets.
+9. Avoid destructive git commands.
+10. Before finishing, inspect the diff and leave the workspace ready to commit.
+11. State which external agent configuration and specialist agents you used.
 
 Expected output:
 - Concise summary of changed files.
@@ -246,26 +349,43 @@ $claudeArgs = @(
 
 $claudeOutput = $prompt | & claude @claudeArgs 2>&1
 $exitCode = $LASTEXITCODE
+
 $output = @"
 # Claude Code Worker Output
 
-Model: `$model`
-Budget: `$$budget`
+Model: $model
+Budget: $$budget
 Issue: #$IssueNumber
-Branch: `$branchName`
+Branch: $($branchContext.BranchName)
 
 ## Claude Output
 
-```text
+~~~text
 $claudeOutput
-```
+~~~
 "@
 Write-Utf8File -Path $outputPath -Content $output
 
 if ($exitCode -ne 0) {
-    gh issue comment $IssueNumber --repo $Repository --body "Claude Code worker failed before PR creation. Run: $env:GITHUB_SERVER_URL/$Repository/actions/runs/$RunId"
+    gh issue comment $IssueNumber --repo $Repository --body "Claude Code worker failed before PR update. Run: $env:GITHUB_SERVER_URL/$Repository/actions/runs/$RunId"
     throw "Claude Code exited with code $exitCode."
 }
+
+$implementationArtifact = @"
+# PDLC Implementation
+
+Issue: #$IssueNumber $($issue.title)
+Branch: $($branchContext.BranchName)
+Run: $env:GITHUB_SERVER_URL/$Repository/actions/runs/$RunId
+Model: $model
+
+## Worker Output
+
+~~~text
+$claudeOutput
+~~~
+"@
+Write-Utf8File -Path $implementationPath -Content $implementationArtifact
 
 $changes = git status --porcelain
 if (-not $changes) {
@@ -276,34 +396,17 @@ if (-not $changes) {
 Invoke-Checked "git" "add" "."
 Invoke-Checked "git" "commit" "-m" "Implement Claude Code work for issue #$IssueNumber"
 Enable-LocalGitCredentialsForPush
-Invoke-Checked "git" "push" "-u" "origin" $branchName
-
-$prBody = @"
-## Summary
-
-- Relates to #$IssueNumber
-- Implemented by local Claude Code worker running on a GitHub self-hosted runner.
-- Worker output: ``$outputPath``
-- Agent config: `$($env:PDLC_AGENT_CONFIG_REPO)`
-
-## Human approval trail
-
-- Analysis approval command: `/approve ai-coding`
-- PR approval remains manual in GitHub.
-
-## Verification
-
-See the worker output and GitHub CI checks for details.
-"@
-
-$prBodyPath = ".pdlc-local-claude-pr-body.md"
-Write-Utf8File -Path $prBodyPath -Content $prBody
-
-$prUrl = gh pr create --repo $Repository --title "Claude Code implementation for issue #$IssueNumber" --body-file $prBodyPath --head $branchName --base $BaseBranch
-if ($LASTEXITCODE -ne 0) {
-    throw "Failed to create pull request for branch $branchName."
+if ($branchContext.HasExistingPr) {
+    Invoke-Checked "git" "push" "origin" $branchContext.BranchName
 }
-Invoke-Checked "gh" "issue" "comment" "$IssueNumber" "--repo" $Repository "--body" "Local Claude Code worker created pull request: $prUrl"
-Invoke-Checked "gh" "workflow" "run" "sample-app-ci.yml" "--repo" $Repository "--ref" $branchName
+else {
+    Invoke-Checked "git" "push" "-u" "origin" $branchContext.BranchName
+    $prUrl = New-PdlcPullRequest -Issue $issue -BranchName $branchContext.BranchName -BaseBranch $BaseBranch -RunDirectory $runDirectory
+    $branchContext.PrUrl = $prUrl
+}
 
-Write-Output "Created pull request: $prUrl"
+$prInfo = if ($branchContext.PrUrl) { $branchContext.PrUrl } else { (Get-PdlcPullRequestForIssue -IssueNumber $IssueNumber).url }
+Invoke-Checked "gh" "issue" "comment" "$IssueNumber" "--repo" $Repository "--body" "Local Claude Code worker updated PDLC pull request: $prInfo"
+Invoke-Checked "gh" "workflow" "run" "sample-app-ci.yml" "--repo" $Repository "--ref" $branchContext.BranchName
+
+Write-Output "Updated pull request: $prInfo"

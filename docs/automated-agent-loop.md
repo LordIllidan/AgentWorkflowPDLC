@@ -46,7 +46,13 @@ Supported issue comments:
 /pdlc plan
 ```
 
-Each command runs local Claude Code on the self-hosted Windows runner and creates or updates a marked issue comment. These comments become PDLC artifacts consumed by the local Claude Code coding worker.
+Each command runs local Claude Code on the self-hosted Windows runner and creates or updates a file in the long-lived PDLC pull request for the issue.
+
+When a stage starts and no PR exists yet, that stage creates the PR. This allows the process to start from research, analysis, architecture, or any other stage without losing the single-PR model.
+
+New issues always start with autonomy risk assessment. The risk agent labels the issue as `pdlc-mode:developer`, `pdlc-mode:semi-auto`, or `pdlc-mode:full-auto`.
+
+In `pdlc-mode:full-auto`, a successful stage posts a status comment and sends a repository dispatch for the next command. The dispatch is required because GitHub does not reliably trigger follow-up workflows from comments created with `GITHUB_TOKEN`.
 
 ## Step 1: Analysis Agent
 
@@ -125,10 +131,10 @@ Trigger:
 
 Output:
 
-- branch named `agent/claude-issue-<number>-<slug>-<run-id>`,
-- Claude Code prompt and output under `pdlc-runs/issue-<number>/`,
+- long-lived branch named `agent/pdlc-issue-<number>-<slug>`,
+- Claude Code prompt, output, stage artifacts, and implementation summary under `pdlc-runs/issue-<number>/`,
 - code changes produced by local Claude Code,
-- prior PDLC stage artifacts injected into the Claude Code prompt,
+- prior PDLC stage artifacts read from the PR branch and injected into the Claude Code prompt,
 - pull request linked to the source issue,
 - comment on the source issue with the PR URL.
 
