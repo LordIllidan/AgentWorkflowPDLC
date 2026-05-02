@@ -8,8 +8,9 @@ This document describes the MVP loop where GitHub Issues drive automated PDLC ag
 2. Analysis agent reads a PDLC issue, splits the change, and posts an analysis comment.
 3. Human approves the analysis with `/approve analysis`.
 4. Coding agent creates a branch, writes PDLC artifacts, updates the sample app documentation, and opens a PR.
-5. Human reviews and merges the PR.
-6. Release monitor runs after merge and creates a follow-up issue when a deployment failure signal is present.
+5. Human reviews the PR and can ask the local review-fix worker to address feedback with `/fix-review`.
+6. Human merges the PR.
+7. Release monitor runs after merge and creates a follow-up issue when a deployment failure signal is present.
 
 The current implementation is deterministic and does not call an LLM. This keeps the workflow testable before adding Copilot, an LLM API, or MCP tools.
 
@@ -101,6 +102,23 @@ Output:
 - comment on the source issue with the PR URL.
 
 This path requires a GitHub self-hosted runner on the user's Windows workstation with the `pdlc-worker` label.
+
+## Step 2c: Local Claude Review Fix Worker
+
+Workflow: `.github/workflows/pdlc-claude-review-fix-worker.yml`
+
+Trigger:
+
+- PR comment, inline review comment, or submitted review containing `/fix-review`.
+
+Output:
+
+- Claude Code review-fix prompt and output under `pdlc-runs/pr-<number>/`,
+- follow-up commit pushed to the existing PR branch,
+- PR comment with the worker output path and run link,
+- `Sample App CI` dispatch for the updated PR branch.
+
+This path refuses fork PRs and does not merge or approve the PR.
 
 ## Step 3: Release Monitor
 

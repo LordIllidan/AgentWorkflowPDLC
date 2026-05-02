@@ -94,6 +94,7 @@ The wrapper script, not Claude, performs:
 
 4. Watch the `PDLC Claude Code Worker` workflow.
 5. Review the PR created by the local worker.
+6. If review feedback should be addressed by the local worker, comment `/fix-review` on the PR.
 
 ## Security Notes
 
@@ -109,3 +110,13 @@ The wrapper script, not Claude, performs:
 - Parallel coding runs may compete for local CPU, disk, and Claude quota.
 - If Claude produces no file changes, the workflow fails and comments on the issue.
 - CI status may not appear as a native PR check when dispatched manually, but the run is linked in GitHub Actions.
+
+## Review Feedback Loop
+
+Review feedback is handled by a separate workflow:
+
+- workflow: `.github/workflows/pdlc-claude-review-fix-worker.yml`,
+- command: `/fix-review`,
+- docs: `docs/local-claude-review-fix-worker.md`.
+
+That workflow reads PR comments, review summaries, inline review comments, and the current PR diff, then pushes a follow-up commit to the same PR branch.

@@ -35,7 +35,8 @@ Business input and final business-facing artifacts may be written in Polish. Age
 7. The issue remains the audit thread for decisions, approvals, and links.
 8. The analysis-to-coding transition is approved with the issue comment `/approve analysis`.
 9. The local Claude Code coding path is approved with the issue comment `/approve ai-coding`.
-10. Release monitoring may create a new PDLC issue when a post-merge failure is detected.
+10. Review feedback can be handed back to the local Claude Code worker with the PR comment `/fix-review`.
+11. Release monitoring may create a new PDLC issue when a post-merge failure is detected.
 
 ## Issue State Model
 
@@ -57,6 +58,7 @@ The repository also contains a deterministic automation loop:
 - `PDLC Agent Analysis` analyzes and splits new PDLC issues.
 - `PDLC Agent Coding` reacts to `/approve analysis`, creates a branch, writes artifacts, and opens a PR.
 - `PDLC Claude Code Worker` reacts to `/approve ai-coding` and runs Claude Code on a self-hosted Windows runner.
+- `PDLC Claude Review Fix Worker` reacts to `/fix-review` and pushes review fixes to the existing PR branch.
 - `PDLC Release Monitor` runs after a merged PR and creates follow-up issues when failure is signaled.
 
 Detailed operating notes are in `docs/automated-agent-loop.md`.
