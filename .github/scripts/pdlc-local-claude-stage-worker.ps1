@@ -540,13 +540,14 @@ $claudeArgs = @(
 
 $claudeOutput = $prompt | & claude @claudeArgs 2>&1
 $exitCode = $LASTEXITCODE
+$claudeOutputText = ($claudeOutput | ForEach-Object { $_.ToString() }) -join "`n"
 
 if ($exitCode -ne 0) {
     gh issue comment $issue.number --repo $Repository --body "Local Claude stage worker failed. Run: $env:GITHUB_SERVER_URL/$Repository/actions/runs/$RunId"
     throw "Claude Code exited with code $exitCode."
 }
 
-$mode = if ($stage.Key -eq "risk") { Get-AutonomyModeFromText -Text $claudeOutput } else { Get-AutonomyModeFromIssue -IssueNumber $issue.number }
+$mode = if ($stage.Key -eq "risk") { Get-AutonomyModeFromText -Text $claudeOutputText } else { Get-AutonomyModeFromIssue -IssueNumber $issue.number }
 if ($stage.Key -eq "risk") {
     Set-AutonomyModeLabel -IssueNumber $issue.number -Mode $mode
 }
@@ -563,7 +564,7 @@ Autonomy mode: $mode
 
 ## Agent Output
 
-$claudeOutput
+$claudeOutputText
 "@
 
 Write-Utf8File -Path $stagePath -Content $artifact
