@@ -48,7 +48,7 @@ Manual approval is done in two ways:
 - checklist approvals still document stage acceptance,
 - `/approve analysis` starts the coding agent and PR creation.
 
-The command-driven stage agents are deterministic scripts. The local coding and review-fix paths use Claude Code on the self-hosted Windows runner.
+The command-driven stage agents, local coding worker, and review-fix worker use Claude Code on the self-hosted Windows runner.
 
 ## Repository Structure
 
@@ -60,6 +60,7 @@ The command-driven stage agents are deterministic scripts. The local coding and 
   scripts/
     pdlc-agent-analyze.mjs
     pdlc-agent-code.mjs
+    pdlc-local-claude-stage-worker.ps1
     pdlc-local-claude-worker.ps1
     pdlc-local-claude-review-fix-worker.ps1
     pdlc-issue-checklist.mjs

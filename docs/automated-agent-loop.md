@@ -46,7 +46,7 @@ Supported issue comments:
 /pdlc plan
 ```
 
-Each command creates or updates a marked issue comment. These comments become PDLC artifacts consumed by the local Claude Code worker.
+Each command runs local Claude Code on the self-hosted Windows runner and creates or updates a marked issue comment. These comments become PDLC artifacts consumed by the local Claude Code coding worker.
 
 ## Step 1: Analysis Agent
 
@@ -172,7 +172,7 @@ Failure signals in the MVP:
 
 ## Current Limitations
 
-- The command-driven stage agents currently render deterministic artifacts from issue context and external prompt configuration.
+- The command-driven stage agents require the self-hosted Windows runner and local Claude Code authentication.
 - The release monitor does not check a real deployment endpoint yet.
 - The coding agent makes a safe documentation-level sample app change.
 - Role-based approval is not enforced yet; approvals are visible in GitHub audit history.

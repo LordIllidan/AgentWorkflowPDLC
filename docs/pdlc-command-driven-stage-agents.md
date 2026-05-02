@@ -2,7 +2,7 @@
 
 ## Cel
 
-Workflow PDLC obsługuje teraz osobne komendy dla etapów poprzedzających kodowanie. Każdy etap zapisuje własny artefakt jako komentarz na GitHub Issue, a lokalny Claude Code worker dostaje te artefakty w promptcie przed implementacją.
+Workflow PDLC obsługuje osobne komendy dla etapów poprzedzających kodowanie. Każdy etap uruchamia lokalne Claude Code na self-hosted Windows runnerze, zapisuje własny artefakt jako komentarz na GitHub Issue, a późniejszy coding worker dostaje te artefakty w promptcie przed implementacją.
 
 ## Komendy
 
@@ -19,11 +19,11 @@ Workflow PDLC obsługuje teraz osobne komendy dla etapów poprzedzających kodow
 
 ```text
 GitHub Issue
-  -> /pdlc research
-  -> /pdlc analyze
-  -> /pdlc risk
-  -> /pdlc architecture
-  -> /pdlc plan
+  -> /pdlc research -> local Claude Code stage worker
+  -> /pdlc analyze -> local Claude Code stage worker
+  -> /pdlc risk -> local Claude Code stage worker
+  -> /pdlc architecture -> local Claude Code stage worker
+  -> /pdlc plan -> local Claude Code stage worker
   -> /approve ai-coding
   -> PR with code, tests, docs, and PDLC artifacts
   -> human review
@@ -31,6 +31,22 @@ GitHub Issue
   -> merge
   -> release monitor
 ```
+
+## Runtime
+
+Workflow `.github/workflows/pdlc-stage-agents.yml` działa na runnerze:
+
+```text
+self-hosted, Windows, X64, pdlc-worker
+```
+
+Skrypt `.github/scripts/pdlc-local-claude-stage-worker.ps1`:
+
+- wykrywa komendę `/pdlc ...`,
+- pobiera prompt agenta z `AgentWorkflowPDLC-AgentConfig`,
+- zbiera wcześniejsze artefakty PDLC z komentarzy issue,
+- uruchamia lokalne `claude --print`,
+- publikuje lub aktualizuje komentarz danego etapu.
 
 ## Agenci
 
@@ -56,11 +72,17 @@ Markery pozwalają workerom zebrać wcześniejsze artefakty bez zgadywania, któ
 
 ## Integracja Z Repo Konfiguracji
 
-Workflow `.github/workflows/pdlc-stage-agents.yml` pobiera repo `AgentWorkflowPDLC-AgentConfig` i czyta prompty agentów z manifestu. Repo można przełączyć zmiennymi:
+Stage worker pobiera repo `AgentWorkflowPDLC-AgentConfig` i czyta prompty agentów z manifestu. Repo można przełączyć zmiennymi:
 
 ```text
 PDLC_AGENT_CONFIG_REPO
 PDLC_AGENT_CONFIG_REF
+```
+
+Budżet dla stage workerów:
+
+```text
+PDLC_CLAUDE_STAGE_MAX_BUDGET_USD
 ```
 
 ## Decyzja O Autonomii

@@ -2,7 +2,7 @@
 
 ## Goal
 
-This feature adds a second coding path for the PDLC workflow: the GitHub issue still controls approvals and audit, but the implementation work runs on the user's Windows workstation through a GitHub self-hosted runner and local Claude Code.
+This feature adds the local Claude Code execution path for the PDLC workflow: the GitHub issue still controls approvals and audit, but AI work runs on the user's Windows workstation through a GitHub self-hosted runner and local Claude Code.
 
 The deterministic coding worker remains available through `/approve analysis`. The local AI coding worker is started with:
 
@@ -15,6 +15,7 @@ The deterministic coding worker remains available through `/approve analysis`. T
 ```text
 GitHub Issue
   -> PDLC Agent Analysis
+  -> optional /pdlc stage commands handled by local Claude Code
   -> human comment: /approve ai-coding
   -> GitHub Actions job on self-hosted Windows runner
   -> local Claude Code CLI edits repository files
@@ -26,6 +27,8 @@ GitHub Issue
 | Component | Responsibility |
 |---|---|
 | `.github/workflows/pdlc-claude-code-worker.yml` | Routes `/approve ai-coding` comments to a self-hosted Windows runner. |
+| `.github/workflows/pdlc-stage-agents.yml` | Routes `/pdlc ...` stage comments to the same local Claude Code runtime. |
+| `.github/scripts/pdlc-local-claude-stage-worker.ps1` | Builds a stage prompt, runs local `claude`, and posts the stage artifact back to the issue. |
 | `.github/scripts/pdlc-local-claude-worker.ps1` | Builds the Claude prompt from the issue and analysis comment, runs local `claude`, commits changes, creates PR, and dispatches CI. |
 | GitHub self-hosted runner | Executes the worker on this workstation with local tools and local Claude Code authentication. |
 | Claude Code CLI | Performs code analysis and file edits. |

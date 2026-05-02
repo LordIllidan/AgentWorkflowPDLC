@@ -11,8 +11,12 @@ permissions:
 
 jobs:
   run-stage-agent:
-    name: Run command-driven PDLC stage agent
-    runs-on: ubuntu-latest
+    name: Run local Claude Code PDLC stage agent
+    runs-on:
+      - self-hosted
+      - Windows
+      - X64
+      - pdlc-worker
     if: >
       github.event.issue.pull_request == null &&
       (startsWith(github.event.comment.body, '/pdlc research') ||
@@ -24,18 +28,27 @@ jobs:
     steps:
       - name: Checkout workflow repository
         uses: actions/checkout@v4
-
-      - name: Checkout agent configuration
-        uses: actions/checkout@v4
         with:
-          repository: ${{ vars.PDLC_AGENT_CONFIG_REPO || 'LordIllidan/AgentWorkflowPDLC-AgentConfig' }}
-          ref: ${{ vars.PDLC_AGENT_CONFIG_REF || 'main' }}
-          path: .pdlc-agent-config
+          ref: ${{ github.event.repository.default_branch }}
 
-      - name: Run stage agent
+      - name: Verify local tools
+        shell: pwsh
+        run: |
+          git --version
+          gh --version
+          claude --version
+
+      - name: Run local Claude Code stage worker
+        shell: pwsh
         env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-          GITHUB_EVENT_PATH: ${{ github.event_path }}
-          PDLC_AGENT_CONFIG_DIR: .pdlc-agent-config
-        run: node .github/scripts/pdlc-stage-agent.mjs
+          PDLC_CLAUDE_MODEL: ${{ vars.PDLC_CLAUDE_MODEL || 'sonnet' }}
+          PDLC_CLAUDE_STAGE_MAX_BUDGET_USD: ${{ vars.PDLC_CLAUDE_STAGE_MAX_BUDGET_USD || vars.PDLC_CLAUDE_MAX_BUDGET_USD || '2' }}
+          PDLC_AGENT_CONFIG_REPO: ${{ vars.PDLC_AGENT_CONFIG_REPO || 'LordIllidan/AgentWorkflowPDLC-AgentConfig' }}
+          PDLC_AGENT_CONFIG_REF: ${{ vars.PDLC_AGENT_CONFIG_REF || 'main' }}
+        run: |
+          .\.github\scripts\pdlc-local-claude-stage-worker.ps1 `
+            -Repository "${{ github.repository }}" `
+            -EventPath "${{ github.event_path }}" `
+            -RunId "${{ github.run_id }}"

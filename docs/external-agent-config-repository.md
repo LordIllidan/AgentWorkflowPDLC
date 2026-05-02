@@ -47,7 +47,7 @@ The first configuration repository version includes:
 - worker startup policy,
 - MCP configuration example without secrets.
 
-Stage agents are used by `.github/workflows/pdlc-stage-agents.yml` for issue comments:
+Stage agents are used by `.github/workflows/pdlc-stage-agents.yml` for issue comments. The workflow runs on the self-hosted Windows runner and calls local Claude Code with the selected agent prompt:
 
 ```text
 /pdlc research
