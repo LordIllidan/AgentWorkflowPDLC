@@ -45,6 +45,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PDLC_CLAUDE_MODEL: ${{ vars.PDLC_CLAUDE_MODEL || 'sonnet' }}
           PDLC_CLAUDE_MAX_BUDGET_USD: ${{ vars.PDLC_CLAUDE_MAX_BUDGET_USD || '3' }}
+          PDLC_AGENT_CONFIG_REPO: ${{ vars.PDLC_AGENT_CONFIG_REPO || 'LordIllidan/AgentWorkflowPDLC-AgentConfig' }}
+          PDLC_AGENT_CONFIG_REF: ${{ vars.PDLC_AGENT_CONFIG_REF || 'main' }}
         run: |
           .\.github\scripts\pdlc-local-claude-worker.ps1 `
             -IssueNumber ${{ github.event.issue.number }} `

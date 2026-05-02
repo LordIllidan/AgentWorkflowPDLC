@@ -56,6 +56,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PDLC_CLAUDE_MODEL: ${{ vars.PDLC_CLAUDE_MODEL || 'sonnet' }}
           PDLC_CLAUDE_REVIEW_MAX_BUDGET_USD: ${{ vars.PDLC_CLAUDE_REVIEW_MAX_BUDGET_USD || '2' }}
+          PDLC_AGENT_CONFIG_REPO: ${{ vars.PDLC_AGENT_CONFIG_REPO || 'LordIllidan/AgentWorkflowPDLC-AgentConfig' }}
+          PDLC_AGENT_CONFIG_REF: ${{ vars.PDLC_AGENT_CONFIG_REF || 'main' }}
         run: |
           .\.github\scripts\pdlc-local-claude-review-fix-worker.ps1 `
             -Repository "${{ github.repository }}" `

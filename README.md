@@ -12,6 +12,7 @@ The current version is intentionally lightweight but now supports an automated i
 - The coding agent creates a branch, generated artifacts, and a PR.
 - Humans can use `/approve ai-coding` to run the local Claude Code worker on a self-hosted Windows runner.
 - Humans can use `/fix-review` on a PR to run the local Claude Code review-fix worker.
+- Claude Code workers fetch specialist agent prompts from `AgentWorkflowPDLC-AgentConfig` at startup.
 - Pull requests link back to the issue and must include generated artifacts.
 - The release monitor runs after merge and can create follow-up issues.
 
@@ -78,6 +79,7 @@ docs/
   github-issue-approval-workflow.md
   local-claude-code-worker.md
   local-claude-review-fix-worker.md
+  external-agent-config-repository.md
   pr-workflow-test-scenario.md
 ```
 
@@ -95,4 +97,5 @@ docs/
 See `docs/automated-agent-loop.md` for the automated flow details.
 See `docs/local-claude-code-worker.md` for the self-hosted Claude Code worker.
 See `docs/local-claude-review-fix-worker.md` for review feedback fixes.
+See `docs/external-agent-config-repository.md` for fetched agent configuration.
 

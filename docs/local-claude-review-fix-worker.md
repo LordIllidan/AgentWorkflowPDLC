@@ -75,8 +75,16 @@ The workflow supports repository variables:
 |---|---:|---|
 | `PDLC_CLAUDE_MODEL` | `sonnet` | Claude Code model alias or full model name. |
 | `PDLC_CLAUDE_REVIEW_MAX_BUDGET_USD` | `2` | Per-run review-fix budget cap. |
+| `PDLC_AGENT_CONFIG_REPO` | `LordIllidan/AgentWorkflowPDLC-AgentConfig` | Repository with external agent prompts and policies. |
+| `PDLC_AGENT_CONFIG_REF` | `main` | Branch, tag, or commit used for agent configuration. |
 
 If `PDLC_CLAUDE_REVIEW_MAX_BUDGET_USD` is not set, the script can fall back to `PDLC_CLAUDE_MAX_BUDGET_USD`.
+
+## External Agent Configuration
+
+Before calling Claude Code, the review-fix worker clones the configured agent repository, reads `agents/manifest.json`, and injects available specialist prompts into the review-fix prompt. The fetched manifest always includes the review agent and may also include platform specialists such as Angular, Java, .NET, or security.
+
+See `docs/external-agent-config-repository.md`.
 
 ## Known Limitations
 

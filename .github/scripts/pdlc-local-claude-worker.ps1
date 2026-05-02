@@ -74,6 +74,72 @@ function Enable-LocalGitCredentialsForPush {
     $env:GIT_TERMINAL_PROMPT = "0"
 }
 
+function Get-AgentConfigContext {
+    param(
+        [Parameter(Mandatory = $true)][string]$RunId,
+        [Parameter(Mandatory = $true)][string]$Purpose
+    )
+
+    $configRepo = if ($env:PDLC_AGENT_CONFIG_REPO) { $env:PDLC_AGENT_CONFIG_REPO } else { "LordIllidan/AgentWorkflowPDLC-AgentConfig" }
+    $configRef = if ($env:PDLC_AGENT_CONFIG_REF) { $env:PDLC_AGENT_CONFIG_REF } else { "main" }
+    $cacheParent = if ($env:RUNNER_TEMP) { $env:RUNNER_TEMP } else { ".pdlc-agent-config-cache" }
+    $cachePath = Join-Path $cacheParent "agent-config-$RunId"
+
+    if (Test-Path -LiteralPath $cachePath) {
+        Remove-Item -Recurse -Force -LiteralPath $cachePath
+    }
+
+    Invoke-Checked "gh" "repo" "clone" $configRepo $cachePath
+    Invoke-Checked "git" "-C" $cachePath "checkout" $configRef
+
+    $manifestPath = Join-Path $cachePath "agents/manifest.json"
+    $workerPolicyPath = Join-Path $cachePath "worker/worker-policy.md"
+
+    if (-not (Test-Path -LiteralPath $manifestPath)) {
+        throw "Agent config manifest was not found at $manifestPath."
+    }
+
+    $manifest = Get-Content -Raw -LiteralPath $manifestPath
+    $workerPolicy = if (Test-Path -LiteralPath $workerPolicyPath) { Get-Content -Raw -LiteralPath $workerPolicyPath } else { "No worker policy file found." }
+    $agentPromptFiles = Get-ChildItem -LiteralPath (Join-Path $cachePath "agents") -Recurse -Filter "agent.md" | Sort-Object FullName
+    $agentPrompts = foreach ($file in $agentPromptFiles) {
+        $relativePath = [System.IO.Path]::GetRelativePath($cachePath, $file.FullName)
+        @"
+### $relativePath
+
+```markdown
+$(Get-Content -Raw -LiteralPath $file.FullName)
+```
+"@
+    }
+
+    return @"
+# External Agent Configuration
+
+Repository: `$configRepo`
+Ref: `$configRef`
+Purpose: `$Purpose`
+
+The worker fetched this configuration at startup. Use the manifest to select the smallest useful set of specialist agents, then apply their prompts while implementing the task.
+
+## Worker Policy
+
+```markdown
+$workerPolicy
+```
+
+## Agent Manifest
+
+```json
+$manifest
+```
+
+## Available Agent Prompts
+
+$($agentPrompts -join "`n")
+"@
+}
+
 Require-Command "git"
 Require-Command "gh"
 Require-Command "claude"
@@ -85,6 +151,7 @@ $issue = gh issue view $IssueNumber --repo $Repository --json number,title,body,
 $comments = gh api "repos/$Repository/issues/$IssueNumber/comments?per_page=100" | ConvertFrom-Json
 $analysisComment = $comments | Where-Object { $_.body -like "*<!-- pdlc-agent-analysis -->*" } | Select-Object -Last 1
 $analysisBody = if ($analysisComment) { $analysisComment.body } else { "No prior analysis comment was found." }
+$agentConfigContext = Get-AgentConfigContext -RunId $RunId -Purpose "issue-coding"
 
 $slug = ConvertTo-Slug -Value $issue.title
 $branchName = "agent/claude-issue-$IssueNumber-$slug-$RunId"
@@ -118,6 +185,11 @@ PDLC analysis comment:
 $analysisBody
 ```
 
+Fetched agent configuration:
+```markdown
+$agentConfigContext
+```
+
 Task:
 1. Implement the requested code change in this repository.
 2. Keep changes scoped to the issue.
@@ -127,6 +199,7 @@ Task:
 6. Do not read or print secrets.
 7. Avoid destructive git commands.
 8. Before finishing, inspect the diff and leave the workspace ready to commit.
+9. State which external agent configuration and specialist agents you used.
 
 Expected output:
 - Concise summary of changed files.
@@ -186,6 +259,7 @@ $prBody = @"
 - Relates to #$IssueNumber
 - Implemented by local Claude Code worker running on a GitHub self-hosted runner.
 - Worker output: ``$outputPath``
+- Agent config: `$($env:PDLC_AGENT_CONFIG_REPO)`
 
 ## Human approval trail
 

@@ -64,8 +64,16 @@ The workflow supports repository variables:
 |---|---:|---|
 | `PDLC_CLAUDE_MODEL` | `sonnet` | Claude Code model alias or full model name. |
 | `PDLC_CLAUDE_MAX_BUDGET_USD` | `3` | Per-run Claude Code budget cap. |
+| `PDLC_AGENT_CONFIG_REPO` | `LordIllidan/AgentWorkflowPDLC-AgentConfig` | Repository with external agent prompts and policies. |
+| `PDLC_AGENT_CONFIG_REF` | `main` | Branch, tag, or commit used for agent configuration. |
 
 The worker uses local Claude Code authentication already configured on the workstation. It does not require storing an Anthropic API key in GitHub for this path.
+
+## External Agent Configuration
+
+Before calling Claude Code, the worker clones the configured agent repository, reads `agents/manifest.json`, and injects available specialist prompts into the task prompt. Claude Code then chooses the relevant agents, for example Angular, Java, .NET, review, or security.
+
+See `docs/external-agent-config-repository.md`.
 
 ## Tool Permissions
 
