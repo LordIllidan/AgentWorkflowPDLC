@@ -19,6 +19,9 @@ public record RiskScore(int total, String riskClass) {
     }
 
     private static String classify(int total) {
+        if (total >= 90) {
+            return "critical";
+        }
         if (total >= 14) {
             return "regulated";
         }

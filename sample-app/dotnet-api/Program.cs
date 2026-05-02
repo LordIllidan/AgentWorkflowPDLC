@@ -12,6 +12,7 @@ app.MapPost("/risk-score", (RiskRequest request) =>
     var score = request.UserImpact + request.TechnicalComplexity + request.Data + request.Security + request.Reversibility + request.RequirementsUncertainty;
     var riskClass = score switch
     {
+        >= 90 => "critical",
         >= 14 => "regulated",
         >= 10 => "high",
         >= 6 => "medium",

@@ -20,5 +20,21 @@ class RiskScoreTest {
         assertEquals(10, score.total());
         assertEquals("high", score.riskClass());
     }
+
+    @Test
+    void classifiesCriticalRisk() {
+        RiskScore score = RiskScore.fromDimensions(15, 15, 15, 15, 15, 15);
+
+        assertEquals(90, score.total());
+        assertEquals("critical", score.riskClass());
+    }
+
+    @Test
+    void criticalBoundary_justBelow_isRegulated() {
+        RiskScore score = RiskScore.fromDimensions(14, 15, 15, 15, 15, 15);
+
+        assertEquals(89, score.total());
+        assertEquals("regulated", score.riskClass());
+    }
 }
 
