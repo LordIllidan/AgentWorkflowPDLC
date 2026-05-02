@@ -52,7 +52,7 @@ When a stage starts and no PR exists yet, that stage creates the PR. This allows
 
 New issues always start with autonomy risk assessment. The risk agent labels the issue as `pdlc-mode:developer`, `pdlc-mode:semi-auto`, or `pdlc-mode:full-auto`.
 
-In `pdlc-mode:full-auto`, a successful stage posts a status comment and sends a repository dispatch for the next command. The dispatch is required because GitHub does not reliably trigger follow-up workflows from comments created with `GITHUB_TOKEN`.
+In `pdlc-mode:full-auto`, a successful stage posts a status comment and sends a `workflow_dispatch` event for the next command. The explicit dispatch is required because GitHub does not reliably trigger follow-up workflows from comments created with `GITHUB_TOKEN`.
 
 ## Step 1: Analysis Agent
 

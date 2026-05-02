@@ -65,6 +65,24 @@ function routeEvent(eventName, event) {
     return route;
   }
 
+  if (eventName === "workflow_dispatch") {
+    const command = event.inputs?.command ?? "";
+    if (startsWithAny(command, stageCommands)) {
+      route.stage = true;
+      route.reason = "Workflow dispatch requested a PDLC stage agent.";
+      return route;
+    }
+
+    if (command.trim().toLowerCase().startsWith("/approve ai-coding")) {
+      route.localCoding = true;
+      route.reason = "Workflow dispatch approved local Claude Code implementation.";
+      return route;
+    }
+
+    route.reason = "Workflow dispatch did not contain a supported PDLC command.";
+    return route;
+  }
+
   if (eventName === "issues") {
     if (isPullRequestIssue(event.issue)) {
       route.reason = "Issue event belongs to a pull request.";

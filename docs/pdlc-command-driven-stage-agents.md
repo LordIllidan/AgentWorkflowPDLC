@@ -61,7 +61,7 @@ Skrypt `.github/scripts/pdlc-local-claude-stage-worker.ps1`:
 
 Komentarze użytkownika są kanałem sterowania procesem. Artefakty agentów nie są już transportowane komentarzami. Każdy stage worker znajduje albo tworzy długowieczny PR powiązany z issue i zapisuje wynik jako plik w `pdlc-runs/issue-<number>/`.
 
-W `pdlc-mode:semi-auto` człowiek wpisuje kolejne komendy. W `pdlc-mode:full-auto` agent po udanym etapie komentuje status i wysyła `repository_dispatch` z następną komendą, żeby kolejny etap uruchomił się automatycznie.
+W `pdlc-mode:semi-auto` człowiek wpisuje kolejne komendy. W `pdlc-mode:full-auto` agent po udanym etapie komentuje status i wysyła `workflow_dispatch` z następną komendą, żeby kolejny etap uruchomił się automatycznie.
 
 ## Integracja Z Repo Konfiguracji
 

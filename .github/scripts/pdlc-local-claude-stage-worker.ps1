@@ -175,6 +175,20 @@ function Get-StageRequest {
 
     $defaultBranch = if ((Test-ObjectProperty -Object $EventPayload -Name "repository") -and (Test-ObjectProperty -Object $EventPayload.repository -Name "default_branch")) { $EventPayload.repository.default_branch } else { "main" }
 
+    if (Test-ObjectProperty -Object $EventPayload -Name "inputs") {
+        $issueNumber = [int]$EventPayload.inputs.issue_number
+        $command = [string]$EventPayload.inputs.command
+        $issue = Get-IssueFromRepository -IssueNumber $issueNumber
+
+        return [pscustomobject]@{
+            Issue = $issue
+            Command = $command
+            HumanComment = $command
+            DefaultBranch = $defaultBranch
+            InitialRisk = $false
+        }
+    }
+
     if ($EventPayload.action -eq "pdlc_stage_command" -and (Test-ObjectProperty -Object $EventPayload -Name "client_payload")) {
         $issueNumber = [int]$EventPayload.client_payload.issue_number
         $command = [string]$EventPayload.client_payload.command
@@ -428,17 +442,7 @@ function Send-StageDispatch {
         [Parameter(Mandatory = $true)][string]$Command
     )
 
-    $payload = @{
-        event_type = "pdlc_stage_command"
-        client_payload = @{
-            issue_number = $IssueNumber
-            command = $Command
-        }
-    } | ConvertTo-Json -Depth 10
-
-    $payloadPath = Join-Path $env:RUNNER_TEMP "pdlc-dispatch-$RunId.json"
-    [System.IO.File]::WriteAllText($payloadPath, $payload, [System.Text.UTF8Encoding]::new($false))
-    Invoke-Checked "gh" "api" "repos/$Repository/dispatches" "--method" "POST" "--input" $payloadPath
+    Invoke-Checked "gh" "workflow" "run" "pdlc-agent-router.yml" "--repo" $Repository "--ref" "main" "-f" "issue_number=$IssueNumber" "-f" "command=$Command"
 }
 
 Test-RequiredCommand "git"
@@ -589,9 +593,10 @@ $status = "PDLC stage '$($stage.Key)' updated PR context: $prInfo"
 Invoke-Checked "gh" "issue" "comment" "$($issue.number)" "--repo" $Repository "--body" $status
 
 if ($mode -eq "full-auto" -and -not [string]::IsNullOrWhiteSpace($stage.NextCommand)) {
-    $nextBody = "Full-auto mode: dispatching next PDLC command `$($stage.NextCommand)` for issue #$($issue.number)."
+    $nextCommand = [string]$stage.NextCommand
+    $nextBody = "Full-auto mode: dispatching next PDLC command $nextCommand for issue #$($issue.number)."
     Invoke-Checked "gh" "issue" "comment" "$($issue.number)" "--repo" $Repository "--body" $nextBody
-    Send-StageDispatch -IssueNumber $issue.number -Command $stage.NextCommand
+    Send-StageDispatch -IssueNumber $issue.number -Command $nextCommand
 }
 
 Write-Output "Updated $($stage.Key) artifact for issue #$($issue.number) in $stagePath."
