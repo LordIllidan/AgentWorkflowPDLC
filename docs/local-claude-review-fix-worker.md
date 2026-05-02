@@ -39,7 +39,7 @@ The job runs only when the matching body contains:
 
 | Component | Responsibility |
 |---|---|
-| `.github/workflows/pdlc-claude-review-fix-worker.yml` | Routes `/fix-review` events to the self-hosted Windows runner. |
+| `.github/workflows/pdlc-agent-router.yml` | Routes `/fix-review` events to the self-hosted Windows runner. |
 | `.github/scripts/pdlc-local-claude-review-fix-worker.ps1` | Collects PR context, runs local `claude`, commits review fixes, pushes to the existing PR branch, comments on the PR, and dispatches CI. |
 | GitHub self-hosted runner | Executes review fixes on the user's workstation. |
 | Claude Code CLI | Interprets review feedback and edits files. |
@@ -63,7 +63,7 @@ The job runs only when the matching body contains:
 /fix-review
 ```
 
-4. Watch the `PDLC Claude Review Fix Worker` workflow.
+4. Watch the `PDLC Agent Router` workflow.
 5. Review the pushed follow-up commit.
 6. Wait for CI and approve or request another fix.
 

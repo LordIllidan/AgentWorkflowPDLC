@@ -34,7 +34,7 @@ GitHub Issue
 
 ## Runtime
 
-Workflow `.github/workflows/pdlc-stage-agents.yml` działa na runnerze:
+Workflow `.github/workflows/pdlc-agent-router.yml` najpierw rozpoznaje komendę, a potem uruchamia stage job na runnerze:
 
 ```text
 self-hosted, Windows, X64, pdlc-worker

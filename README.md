@@ -6,7 +6,7 @@ The current version is intentionally lightweight but now supports an automated i
 
 - GitHub Issue is the source of work.
 - Each PDLC stage is represented by a checklist item in the issue body.
-- GitHub Actions reads the checklist and comments the current workflow status.
+- `PDLC Agent Router` reads GitHub events and decides which agent job should run.
 - The analysis agent comments a proposed split for new PDLC issues.
 - Humans approve analysis by commenting `/approve analysis`.
 - The coding agent creates a branch, generated artifacts, and a PR.
@@ -58,6 +58,7 @@ The command-driven stage agents, local coding worker, and review-fix worker use 
     pdlc-task.yml
     config.yml
   scripts/
+    pdlc-agent-router.mjs
     pdlc-agent-analyze.mjs
     pdlc-agent-code.mjs
     pdlc-local-claude-stage-worker.ps1
@@ -67,12 +68,7 @@ The command-driven stage agents, local coding worker, and review-fix worker use 
     pdlc-release-monitor.mjs
     pdlc-research-agent.mjs
   workflows/
-    pdlc-agent-analysis.yml
-    pdlc-agent-coding.yml
-    pdlc-claude-code-worker.yml
-    pdlc-claude-review-fix-worker.yml
-    pdlc-issue-checklist.yml
-    pdlc-stage-agents.yml
+    pdlc-agent-router.yml
     pdlc-release-monitor.yml
     pdlc-research-agent.yml
   pull_request_template.md
@@ -83,6 +79,7 @@ docs/
   local-claude-code-worker.md
   local-claude-review-fix-worker.md
   external-agent-config-repository.md
+  pdlc-agent-router.md
   pdlc-command-driven-stage-agents.md
   pr-workflow-test-scenario.md
 ```
@@ -103,5 +100,6 @@ See `docs/automated-agent-loop.md` for the automated flow details.
 See `docs/local-claude-code-worker.md` for the self-hosted Claude Code worker.
 See `docs/local-claude-review-fix-worker.md` for review feedback fixes.
 See `docs/external-agent-config-repository.md` for fetched agent configuration.
+See `docs/pdlc-agent-router.md` for centralized GitHub event routing.
 See `docs/pdlc-command-driven-stage-agents.md` for staged GitHub issue commands.
 

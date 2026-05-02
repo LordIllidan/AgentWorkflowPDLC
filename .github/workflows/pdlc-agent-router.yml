@@ -1,0 +1,262 @@
+name: PDLC Agent Router
+
+on:
+  issues:
+    types:
+      - opened
+      - edited
+      - reopened
+  issue_comment:
+    types:
+      - created
+  pull_request_review_comment:
+    types:
+      - created
+  pull_request_review:
+    types:
+      - submitted
+  repository_dispatch:
+    types:
+      - pdlc_issue_created
+
+permissions:
+  actions: write
+  contents: write
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: pdlc-agent-router-${{ github.event.issue.number || github.event.pull_request.number || github.event.client_payload.issue_number || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  route:
+    name: Decide PDLC agent route
+    runs-on: ubuntu-latest
+    outputs:
+      status: ${{ steps.route.outputs.status }}
+      analysis: ${{ steps.route.outputs.analysis }}
+      stage: ${{ steps.route.outputs.stage }}
+      deterministicCoding: ${{ steps.route.outputs.deterministicCoding }}
+      localCoding: ${{ steps.route.outputs.localCoding }}
+      reviewFix: ${{ steps.route.outputs.reviewFix }}
+      reason: ${{ steps.route.outputs.reason }}
+
+    steps:
+      - name: Checkout workflow repository
+        uses: actions/checkout@v4
+
+      - name: Route event
+        id: route
+        env:
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          GITHUB_EVENT_PATH: ${{ github.event_path }}
+        run: node .github/scripts/pdlc-agent-router.mjs
+
+  issue-status:
+    name: Update issue status
+    needs: route
+    if: needs.route.outputs.status == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout workflow repository
+        uses: actions/checkout@v4
+
+      - name: Update issue status
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_EVENT_PATH: ${{ github.event_path }}
+        run: node .github/scripts/pdlc-issue-checklist.mjs
+
+  issue-analysis:
+    name: Analyze issue
+    needs: route
+    if: needs.route.outputs.analysis == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout workflow repository
+        uses: actions/checkout@v4
+
+      - name: Analyze issue
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_EVENT_PATH: ${{ github.event_path }}
+        run: node .github/scripts/pdlc-agent-analyze.mjs
+
+  stage-agent:
+    name: Run local Claude Code stage agent
+    needs: route
+    if: needs.route.outputs.stage == 'true'
+    runs-on:
+      - self-hosted
+      - Windows
+      - X64
+      - pdlc-worker
+
+    steps:
+      - name: Checkout workflow repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+
+      - name: Verify local tools
+        shell: pwsh
+        run: |
+          git --version
+          gh --version
+          claude --version
+
+      - name: Run local Claude Code stage worker
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PDLC_CLAUDE_MODEL: ${{ vars.PDLC_CLAUDE_MODEL || 'sonnet' }}
+          PDLC_CLAUDE_STAGE_MAX_BUDGET_USD: ${{ vars.PDLC_CLAUDE_STAGE_MAX_BUDGET_USD || vars.PDLC_CLAUDE_MAX_BUDGET_USD || '2' }}
+          PDLC_AGENT_CONFIG_REPO: ${{ vars.PDLC_AGENT_CONFIG_REPO || 'LordIllidan/AgentWorkflowPDLC-AgentConfig' }}
+          PDLC_AGENT_CONFIG_REF: ${{ vars.PDLC_AGENT_CONFIG_REF || 'main' }}
+        run: |
+          .\.github\scripts\pdlc-local-claude-stage-worker.ps1 `
+            -Repository "${{ github.repository }}" `
+            -EventPath "${{ github.event_path }}" `
+            -RunId "${{ github.run_id }}"
+
+  deterministic-coding:
+    name: Run deterministic coding agent
+    needs: route
+    if: needs.route.outputs.deterministicCoding == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout default branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+
+      - name: Prepare agent changes
+        id: prepare
+        env:
+          GITHUB_EVENT_PATH: ${{ github.event_path }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+        run: node .github/scripts/pdlc-agent-code.mjs
+
+      - name: Commit and push branch
+        env:
+          BRANCH_NAME: ${{ steps.prepare.outputs.branch }}
+          COMMIT_MESSAGE: ${{ steps.prepare.outputs.commit_message }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$BRANCH_NAME"
+          git add pdlc-runs sample-app
+          git commit -m "$COMMIT_MESSAGE"
+          git push -u origin "$BRANCH_NAME"
+
+      - name: Create pull request
+        id: create_pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_TITLE: ${{ steps.prepare.outputs.pr_title }}
+          BRANCH_NAME: ${{ steps.prepare.outputs.branch }}
+        run: |
+          pr_url="$(gh pr create --title "$PR_TITLE" --body-file .pdlc-pr-body.md --head "$BRANCH_NAME" --base "${{ github.event.repository.default_branch }}")"
+          echo "pr_url=$pr_url" >> "$GITHUB_OUTPUT"
+
+      - name: Comment PR link on issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_URL: ${{ steps.create_pr.outputs.pr_url }}
+        run: |
+          gh issue comment "${{ github.event.issue.number }}" --body "Coding agent created pull request: $PR_URL"
+
+      - name: Dispatch Sample App CI
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BRANCH_NAME: ${{ steps.prepare.outputs.branch }}
+        run: |
+          gh workflow run sample-app-ci.yml --ref "$BRANCH_NAME"
+
+  local-coding:
+    name: Run local Claude Code coding worker
+    needs: route
+    if: needs.route.outputs.localCoding == 'true'
+    runs-on:
+      - self-hosted
+      - Windows
+      - X64
+      - pdlc-worker
+
+    steps:
+      - name: Checkout default branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+
+      - name: Verify local tools
+        shell: pwsh
+        run: |
+          git --version
+          gh --version
+          node --version
+          claude --version
+
+      - name: Run local Claude Code worker
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PDLC_CLAUDE_MODEL: ${{ vars.PDLC_CLAUDE_MODEL || 'sonnet' }}
+          PDLC_CLAUDE_MAX_BUDGET_USD: ${{ vars.PDLC_CLAUDE_MAX_BUDGET_USD || '3' }}
+          PDLC_AGENT_CONFIG_REPO: ${{ vars.PDLC_AGENT_CONFIG_REPO || 'LordIllidan/AgentWorkflowPDLC-AgentConfig' }}
+          PDLC_AGENT_CONFIG_REF: ${{ vars.PDLC_AGENT_CONFIG_REF || 'main' }}
+        run: |
+          .\.github\scripts\pdlc-local-claude-worker.ps1 `
+            -IssueNumber ${{ github.event.issue.number }} `
+            -Repository "${{ github.repository }}" `
+            -BaseBranch "${{ github.event.repository.default_branch }}" `
+            -RunId "${{ github.run_id }}"
+
+  review-fix:
+    name: Run local Claude Code review-fix worker
+    needs: route
+    if: needs.route.outputs.reviewFix == 'true'
+    runs-on:
+      - self-hosted
+      - Windows
+      - X64
+      - pdlc-worker
+
+    steps:
+      - name: Checkout default branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+
+      - name: Verify local tools
+        shell: pwsh
+        run: |
+          git --version
+          gh --version
+          node --version
+          claude --version
+
+      - name: Run local Claude Code review-fix worker
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PDLC_CLAUDE_MODEL: ${{ vars.PDLC_CLAUDE_MODEL || 'sonnet' }}
+          PDLC_CLAUDE_REVIEW_MAX_BUDGET_USD: ${{ vars.PDLC_CLAUDE_REVIEW_MAX_BUDGET_USD || '2' }}
+          PDLC_AGENT_CONFIG_REPO: ${{ vars.PDLC_AGENT_CONFIG_REPO || 'LordIllidan/AgentWorkflowPDLC-AgentConfig' }}
+          PDLC_AGENT_CONFIG_REF: ${{ vars.PDLC_AGENT_CONFIG_REF || 'main' }}
+        run: |
+          .\.github\scripts\pdlc-local-claude-review-fix-worker.ps1 `
+            -Repository "${{ github.repository }}" `
+            -EventPath "${{ github.event_path }}" `
+            -RunId "${{ github.run_id }}"

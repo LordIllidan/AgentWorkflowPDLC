@@ -15,7 +15,7 @@ This document describes the MVP loop where GitHub Issues drive automated PDLC ag
 9. Human merges the PR.
 10. Release monitor runs after merge and creates a follow-up issue when a deployment failure signal is present.
 
-The current implementation is deterministic and does not call an LLM. This keeps the workflow testable before adding Copilot, an LLM API, or MCP tools.
+Most GitHub events enter through `.github/workflows/pdlc-agent-router.yml`. The router decides whether to run status update, analysis, stage agent, coding, local Claude Code coding, or review-fix work.
 
 ## Step 0: Research Agent
 
@@ -34,7 +34,7 @@ Output:
 
 ## Command-Driven Stage Agents
 
-Workflow: `.github/workflows/pdlc-stage-agents.yml`
+Workflow: `.github/workflows/pdlc-agent-router.yml`
 
 Supported issue comments:
 
@@ -50,7 +50,7 @@ Each command runs local Claude Code on the self-hosted Windows runner and create
 
 ## Step 1: Analysis Agent
 
-Workflow: `.github/workflows/pdlc-agent-analysis.yml`
+Workflow: `.github/workflows/pdlc-agent-router.yml`
 
 Triggers:
 
@@ -99,7 +99,7 @@ Recommended full staged path before local AI coding:
 
 ## Step 2: Coding Agent
 
-Workflow: `.github/workflows/pdlc-agent-coding.yml`
+Workflow: `.github/workflows/pdlc-agent-router.yml`
 
 Trigger:
 
@@ -117,7 +117,7 @@ The sample app documentation change intentionally triggers `Sample App CI` on th
 
 ## Step 2b: Local Claude Code Worker
 
-Workflow: `.github/workflows/pdlc-claude-code-worker.yml`
+Workflow: `.github/workflows/pdlc-agent-router.yml`
 
 Trigger:
 
@@ -136,7 +136,7 @@ This path requires a GitHub self-hosted runner on the user's Windows workstation
 
 ## Step 2c: Local Claude Review Fix Worker
 
-Workflow: `.github/workflows/pdlc-claude-review-fix-worker.yml`
+Workflow: `.github/workflows/pdlc-agent-router.yml`
 
 Trigger:
 
@@ -172,7 +172,7 @@ Failure signals in the MVP:
 
 ## Current Limitations
 
-- The command-driven stage agents require the self-hosted Windows runner and local Claude Code authentication.
+- Stage, local coding, and review-fix routes require the self-hosted Windows runner and local Claude Code authentication.
 - The release monitor does not check a real deployment endpoint yet.
 - The coding agent makes a safe documentation-level sample app change.
 - Role-based approval is not enforced yet; approvals are visible in GitHub audit history.

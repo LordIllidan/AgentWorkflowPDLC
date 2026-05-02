@@ -26,8 +26,7 @@ GitHub Issue
 
 | Component | Responsibility |
 |---|---|
-| `.github/workflows/pdlc-claude-code-worker.yml` | Routes `/approve ai-coding` comments to a self-hosted Windows runner. |
-| `.github/workflows/pdlc-stage-agents.yml` | Routes `/pdlc ...` stage comments to the same local Claude Code runtime. |
+| `.github/workflows/pdlc-agent-router.yml` | Routes `/pdlc ...`, `/approve ai-coding`, and `/fix-review` events to the correct worker. |
 | `.github/scripts/pdlc-local-claude-stage-worker.ps1` | Builds a stage prompt, runs local `claude`, and posts the stage artifact back to the issue. |
 | `.github/scripts/pdlc-local-claude-worker.ps1` | Builds the Claude prompt from the issue and analysis comment, runs local `claude`, commits changes, creates PR, and dispatches CI. |
 | GitHub self-hosted runner | Executes the worker on this workstation with local tools and local Claude Code authentication. |
@@ -113,7 +112,7 @@ The wrapper script, not Claude, performs:
 /approve ai-coding
 ```
 
-4. Watch the `PDLC Claude Code Worker` workflow.
+4. Watch the `PDLC Agent Router` workflow.
 5. Review the PR created by the local worker.
 6. If review feedback should be addressed by the local worker, comment `/fix-review` on the PR.
 
@@ -136,7 +135,7 @@ The wrapper script, not Claude, performs:
 
 Review feedback is handled by a separate workflow:
 
-- workflow: `.github/workflows/pdlc-claude-review-fix-worker.yml`,
+- workflow: `.github/workflows/pdlc-agent-router.yml`,
 - command: `/fix-review`,
 - docs: `docs/local-claude-review-fix-worker.md`.
 
