@@ -294,8 +294,8 @@ function Initialize-PdlcBranch {
 
     $existingPr = Get-PdlcPullRequestForIssue -IssueNumber $Issue.number
     if ($existingPr) {
-        Invoke-Checked "git" "fetch" "origin" $existingPr.headRefName
-        Invoke-Checked "git" "switch" "-C" $existingPr.headRefName "origin/$($existingPr.headRefName)"
+        Invoke-Checked "git" "fetch" "origin" $existingPr.headRefName | Out-Null
+        Invoke-Checked "git" "switch" "-C" $existingPr.headRefName "origin/$($existingPr.headRefName)" | Out-Null
 
         return [pscustomobject]@{
             BranchName = $existingPr.headRefName
@@ -308,8 +308,8 @@ function Initialize-PdlcBranch {
     $slug = ConvertTo-Slug -Value $Issue.title
     $branchName = "agent/pdlc-issue-$($Issue.number)-$slug"
 
-    Invoke-Checked "git" "fetch" "origin" $BaseBranch
-    Invoke-Checked "git" "switch" "-c" $branchName "origin/$BaseBranch"
+    Invoke-Checked "git" "fetch" "origin" $BaseBranch | Out-Null
+    Invoke-Checked "git" "switch" "-c" $branchName "origin/$BaseBranch" | Out-Null
 
     return [pscustomobject]@{
         BranchName = $branchName
