@@ -14,16 +14,17 @@ Router ogranicza to do jednego runu `PDLC Agent Router`.
 
 | Event | Warunek | Job |
 |---|---|---|
-| `issues` | nowe zwykłe issue | `issue-status`, `risk-assessment` |
-| `issues` | edycja lub reopen zwykłego issue | `issue-status`, `issue-analysis` |
+| `issues` | nowe zwykłe issue | `risk-assessment` |
 | `repository_dispatch` | `pdlc_issue_created` | `risk-assessment` |
 | `repository_dispatch` | `pdlc_stage_command` z komendą stage | `stage-agent` |
 | `repository_dispatch` | `pdlc_stage_command` z `/approve ai-coding` | `local-coding` |
 | `workflow_dispatch` | input `command` z komendą stage | `stage-agent` |
 | `workflow_dispatch` | input `command` z `/approve ai-coding` | `local-coding` |
 | `issue_comment` | `/pdlc research`, `/pdlc analyze`, `/pdlc risk`, `/pdlc architecture`, `/pdlc plan` | `stage-agent` |
-| `issue_comment` | `/approve analysis` | `deterministic-coding` |
+| `issue_comment` | `/pdlc answer` z `stage: <stage>` | `stage-agent` |
 | `issue_comment` | `/approve ai-coding` | `local-coding` |
+| `push` | commit message `[PDLC #16] /pdlc analyze` | `stage-agent` |
+| `push` | commit message `[PDLC issue:16] /approve ai-coding` | `local-coding` |
 | `issue_comment` na PR | `/fix-review` | `review-fix` |
 | `pull_request_review_comment` | `/fix-review` | `review-fix` |
 | `pull_request_review` | `/fix-review` | `review-fix` |
@@ -32,7 +33,7 @@ Router ogranicza to do jednego runu `PDLC Agent Router`.
 
 - `.github/workflows/pdlc-agent-router.yml` - jeden centralny workflow.
 - `.github/scripts/pdlc-agent-router.mjs` - skrypt decyzyjny, który wystawia outputy routingu.
-- Skrypty wykonawcze pozostają osobne: `pdlc-agent-analyze.mjs`, `pdlc-issue-checklist.mjs`, `pdlc-local-claude-stage-worker.ps1`, `pdlc-local-claude-worker.ps1`, `pdlc-local-claude-review-fix-worker.ps1`.
+- Skrypty wykonawcze AI pozostają osobne: `pdlc-local-claude-stage-worker.ps1`, `pdlc-local-claude-worker.ps1`, `pdlc-local-claude-review-fix-worker.ps1`.
 
 ## Zasada
 

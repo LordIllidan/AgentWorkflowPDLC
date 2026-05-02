@@ -22,9 +22,9 @@ Recommended exercise:
 3. Manually approve `Intake approved`.
 4. Continue through risk, requirements, architecture, planning, coding, QA, security, docs, and release.
 5. Open a PR against this sample app.
-6. Use `sample-app-ci.yml` as the deterministic gate.
+6. Use local build and test commands as verification evidence in the PDLC PR.
 
-This README line intentionally lives under `sample-app/**` so documentation-only PRs can trigger the sample application CI during workflow tests.
+The active GitHub workflow is the AI agent router; sample app verification is run by local workers or reviewers.
 
 ## Local Commands
 

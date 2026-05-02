@@ -16,6 +16,8 @@ Każdy stage agent najpierw szuka otwartego PR powiązanego z issue. Jeśli PR n
 
 Komentarze issue służą tylko do sterowania i statusu. Nie są źródłem prawdy dla kolejnych agentów.
 
+Wyjątkiem są odpowiedzi użytkownika na pytania agenta. Jeśli agent zapisze artefakt ze statusem `Status: BLOCKED_QUESTIONS`, publikuje pytania w komentarzu. Użytkownik odpowiada komentarzem `/pdlc answer` oraz `stage: <stage>`, a agent wraca do tego samego kroku i aktualizuje plik artefaktu w PR.
+
 ```text
 pdlc-runs/issue-<number>/00-issue.md
 pdlc-runs/issue-<number>/05-autonomy-risk.md

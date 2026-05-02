@@ -2,7 +2,7 @@
 
 ## Cel
 
-Workflow PDLC obsługuje osobne komendy dla etapów poprzedzających kodowanie. Każdy etap uruchamia lokalne Claude Code na self-hosted Windows runnerze, zapisuje własny artefakt jako komentarz na GitHub Issue, a późniejszy coding worker dostaje te artefakty w promptcie przed implementacją.
+Workflow PDLC obsługuje osobne komendy dla etapów poprzedzających kodowanie. Każdy etap uruchamia lokalne Claude Code na self-hosted Windows runnerze i zapisuje własny artefakt jako plik w długowiecznym PR.
 
 ## Komendy
 
@@ -13,6 +13,8 @@ Workflow PDLC obsługuje osobne komendy dla etapów poprzedzających kodowanie. 
 /pdlc architecture
 /pdlc plan
 /approve ai-coding
+/pdlc answer
+stage: architecture
 ```
 
 ## Przepływ
@@ -29,7 +31,6 @@ GitHub Issue
   -> human review
   -> /fix-review when needed
   -> merge
-  -> release monitor
 ```
 
 ## Runtime
@@ -63,6 +64,15 @@ Komentarze użytkownika są kanałem sterowania procesem. Artefakty agentów nie
 
 W `pdlc-mode:semi-auto` człowiek wpisuje kolejne komendy. W `pdlc-mode:full-auto` agent po udanym etapie komentuje status i wysyła `workflow_dispatch` z następną komendą, żeby kolejny etap uruchomił się automatycznie.
 
+Jeśli agent ma pytania blokujące, zapisuje artefakt ze statusem `Status: BLOCKED_QUESTIONS`, publikuje pytania w komentarzu issue i nie uruchamia kolejnego kroku. Użytkownik odpowiada przez `/pdlc answer` oraz `stage: <stage>`, a ten sam etap uruchamia się ponownie.
+
+Można też wyzwolić etap commitem do `main`:
+
+```text
+[PDLC #16] /pdlc analyze
+[PDLC issue:16] /approve ai-coding
+```
+
 ## Integracja Z Repo Konfiguracji
 
 Stage worker pobiera repo `AgentWorkflowPDLC-AgentConfig` i czyta prompty agentów z manifestu. Repo można przełączyć zmiennymi:
@@ -80,11 +90,11 @@ PDLC_CLAUDE_STAGE_MAX_BUDGET_USD
 
 ## Decyzja O Autonomii
 
-Risk Agent zwraca jedną z rekomendacji:
+Risk Agent ustawia jedną z etykiet:
 
-- `agent-autonomous` - agent może wykonać implementację po normalnej akceptacji.
-- `agent-with-human-review` - agent może wykonać implementację, ale PR review musi być ścisłe.
-- `human-dev-required` - developer powinien przejąć implementację, a agenci mogą pomóc analizą, testami lub dokumentacją.
+- `pdlc-mode:developer` - developer powinien przejąć implementację, a agenci mogą pomóc analizą.
+- `pdlc-mode:semi-auto` - człowiek steruje kolejnymi komendami.
+- `pdlc-mode:full-auto` - agenci sami dispatchują kolejne kroki po udanym etapie.
 
 ## Test End-To-End
 

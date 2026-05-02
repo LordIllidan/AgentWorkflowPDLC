@@ -4,7 +4,7 @@
 
 This feature adds the local Claude Code execution path for the PDLC workflow: the GitHub issue still controls approvals and audit, but AI work runs on the user's Windows workstation through a GitHub self-hosted runner and local Claude Code.
 
-The deterministic coding worker remains available through `/approve analysis`. The local AI coding worker is started with:
+The local AI coding worker is started with:
 
 ```text
 /approve ai-coding
@@ -14,12 +14,11 @@ The deterministic coding worker remains available through `/approve analysis`. T
 
 ```text
 GitHub Issue
-  -> PDLC Agent Analysis
-  -> optional /pdlc stage commands handled by local Claude Code
+  -> PDLC stage commands handled by local Claude Code
   -> human comment: /approve ai-coding
   -> GitHub Actions job on self-hosted Windows runner
   -> local Claude Code CLI edits repository files
-  -> wrapper script commits, pushes, opens PR, and dispatches Sample App CI
+  -> wrapper script commits and pushes to the long-lived PDLC PR
 ```
 
 ## Components
@@ -27,8 +26,8 @@ GitHub Issue
 | Component | Responsibility |
 |---|---|
 | `.github/workflows/pdlc-agent-router.yml` | Routes `/pdlc ...`, `/approve ai-coding`, and `/fix-review` events to the correct worker. |
-| `.github/scripts/pdlc-local-claude-stage-worker.ps1` | Builds a stage prompt, runs local `claude`, and posts the stage artifact back to the issue. |
-| `.github/scripts/pdlc-local-claude-worker.ps1` | Builds the Claude prompt from the issue and analysis comment, runs local `claude`, commits changes, creates PR, and dispatches CI. |
+| `.github/scripts/pdlc-local-claude-stage-worker.ps1` | Builds a stage prompt, runs local `claude`, and writes the stage artifact to the long-lived PR. |
+| `.github/scripts/pdlc-local-claude-worker.ps1` | Builds the Claude prompt from PR artifacts and user answers, runs local `claude`, commits code changes, and updates the PR. |
 | GitHub self-hosted runner | Executes the worker on this workstation with local tools and local Claude Code authentication. |
 | Claude Code CLI | Performs code analysis and file edits. |
 
@@ -103,12 +102,12 @@ The wrapper script, not Claude, performs:
 - commit,
 - push,
 - PR creation,
-- CI workflow dispatch.
+- PR comment with the update.
 
 ## Usage
 
 1. Create or open a PDLC issue.
-2. Wait for `PDLC Agent Analysis`.
+2. Wait for the autonomy risk label and stage artifacts.
 3. Comment:
 
 ```text

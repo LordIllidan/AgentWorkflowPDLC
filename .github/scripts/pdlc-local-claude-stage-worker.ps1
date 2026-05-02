@@ -126,6 +126,130 @@ function Get-StageDefinition {
     throw "No supported PDLC stage command found: $Command"
 }
 
+function Get-CommandFromAnswer {
+    param([Parameter(Mandatory = $true)][string]$Text)
+
+    $stageMatch = [regex]::Match($Text, "(?im)^\s*stage\s*:\s*(research|analyze|analysis|risk|architecture|plan)\s*$")
+    if (-not $stageMatch.Success) {
+        throw "Answer comments must include a line like 'stage: architecture'."
+    }
+
+    switch ($stageMatch.Groups[1].Value.ToLowerInvariant()) {
+        "research" { return "/pdlc research" }
+        "analyze" { return "/pdlc analyze" }
+        "analysis" { return "/pdlc analyze" }
+        "risk" { return "/pdlc risk" }
+        "architecture" { return "/pdlc architecture" }
+        "plan" { return "/pdlc plan" }
+        default { throw "Unsupported answer stage '$($stageMatch.Groups[1].Value)'." }
+    }
+}
+
+function Get-PdlcCommandFromCommitMessage {
+    param([Parameter(Mandatory = $true)][string]$Message)
+
+    $issueMatch = [regex]::Match($Message, "(?i)(?:issue|#)\s*#?(\d+)")
+    $commandMatch = [regex]::Match($Message, "(?i)/pdlc\s+(?:research|analyze|risk|architecture|plan)|/approve\s+ai-coding")
+
+    if (-not $issueMatch.Success -or -not $commandMatch.Success) {
+        throw "Push event does not contain a PDLC commit command. Expected format: [PDLC #16] /pdlc analyze"
+    }
+
+    return [pscustomobject]@{
+        IssueNumber = [int]$issueMatch.Groups[1].Value
+        Command = $commandMatch.Value
+    }
+}
+
+function Get-StageArtifactRequirements {
+    param([Parameter(Mandatory = $true)][string]$StageKey)
+
+    switch ($StageKey) {
+        "risk" {
+            return @"
+Required artifact sections:
+- Status: READY
+- Mode: Developer | Semi-auto | Full-auto
+- Decision summary
+- Risk factors with severity and rationale
+- Autonomy limits
+- Human checkpoints
+- Next command
+"@
+        }
+        "research" {
+            return @"
+Required artifact sections:
+- Status: READY or Status: BLOCKED_QUESTIONS
+- Executive research summary
+- Domain assumptions for housing risk
+- Three candidate algorithm families with formulas/pseudocode-level details
+- Input data needed for each algorithm
+- Output data and risk class mapping
+- Market or architectural references where applicable
+- Recommendation for this repository
+- Questions For User only if decisions are blocked
+- Next command only when Status is READY
+"@
+        }
+        "analysis" {
+            return @"
+Required artifact sections:
+- Status: READY or Status: BLOCKED_QUESTIONS
+- Product scope
+- User stories table with IDs, role, need, value
+- Acceptance criteria per story in Given/When/Then form
+- Functional requirements
+- Non-functional requirements
+- Explicit out of scope
+- Test scenarios
+- Questions For User only if decisions are blocked
+- Next command only when Status is READY
+"@
+        }
+        "architecture" {
+            return @"
+Required artifact sections:
+- Status: READY or Status: BLOCKED_QUESTIONS
+- Architecture decision summary
+- Affected applications and files
+- API contract proposal with request/response examples
+- Domain model and TypeScript/.NET/Java shape where relevant
+- Algorithm interfaces and deterministic recommendation rule
+- Data validation and error handling
+- Test case matrix with edge cases
+- Security/data/privacy impact
+- ADR decision
+- Questions For User only if decisions are blocked
+- Next command only when Status is READY
+"@
+        }
+        "plan" {
+            return @"
+Required artifact sections:
+- Status: READY or Status: BLOCKED_QUESTIONS
+- Implementation sequence
+- File-by-file change plan
+- Test plan per stack
+- Documentation plan
+- Rollback plan
+- Coding worker handoff with exact scope
+- Questions For User only if decisions are blocked
+- Next command only when Status is READY
+"@
+        }
+        default {
+            return "Required artifact sections: Status, decisions, evidence, next command."
+        }
+    }
+}
+
+function Test-StageBlockedByQuestions {
+    param([Parameter(Mandatory = $true)][string]$Text)
+
+    return $Text -match "(?im)^\s*Status\s*:\s*BLOCKED_QUESTIONS\s*$"
+}
+
 function Get-AgentConfig {
     param(
         [Parameter(Mandatory = $true)][string]$AgentId,
@@ -189,6 +313,19 @@ function Get-StageRequest {
         }
     }
 
+    if ((Test-ObjectProperty -Object $EventPayload -Name "head_commit") -and (Test-ObjectProperty -Object $EventPayload.head_commit -Name "message")) {
+        $commitCommand = Get-PdlcCommandFromCommitMessage -Message ([string]$EventPayload.head_commit.message)
+        $issue = Get-IssueFromRepository -IssueNumber $commitCommand.IssueNumber
+
+        return [pscustomobject]@{
+            Issue = $issue
+            Command = $commitCommand.Command
+            HumanComment = $EventPayload.head_commit.message
+            DefaultBranch = $defaultBranch
+            InitialRisk = $false
+        }
+    }
+
     if ($EventPayload.action -eq "pdlc_stage_command" -and (Test-ObjectProperty -Object $EventPayload -Name "client_payload")) {
         $issueNumber = [int]$EventPayload.client_payload.issue_number
         $command = [string]$EventPayload.client_payload.command
@@ -224,10 +361,13 @@ function Get-StageRequest {
             exit 0
         }
 
+        $commentBody = [string]$EventPayload.comment.body
+        $command = if ($commentBody.Trim().ToLowerInvariant().StartsWith("/pdlc answer")) { Get-CommandFromAnswer -Text $commentBody } else { $commentBody }
+
         return [pscustomobject]@{
             Issue = $EventPayload.issue
-            Command = $EventPayload.comment.body
-            HumanComment = $EventPayload.comment.body
+            Command = $command
+            HumanComment = $commentBody
             DefaultBranch = $defaultBranch
             InitialRisk = $false
         }
@@ -463,6 +603,7 @@ $agentConfig = Get-AgentConfig -AgentId $stage.AgentId -RunId $RunId
 $branchContext = Initialize-PdlcBranch -Issue $issue -BaseBranch $request.DefaultBranch
 Write-IssueContextFile -Issue $issue -RunDirectory $runDirectory
 $priorArtifacts = Get-PdlcArtifactContext -RunDirectory $runDirectory
+$artifactRequirements = Get-StageArtifactRequirements -StageKey $stage.Key
 
 $prompt = @"
 You are running as the $($stage.Title) inside the PDLC GitHub issue workflow.
@@ -510,26 +651,34 @@ $($agentConfig.Prompt)
 ~~~
 
 Task:
-1. Produce a real stage artifact for this issue, not a template.
+1. Produce a complete stage artifact for this issue, not a template, not a meta-summary, and not "artifact written to file".
 2. Use issue content, prior PR artifact files, and the agent base prompt.
-3. If this is autonomy risk assessment, choose exactly one mode and start the output with one of:
+3. The full Markdown response will be written directly into $stagePath, so the response itself must contain all business and technical details.
+4. If this is autonomy risk assessment, choose exactly one mode and start the output with one of:
    Mode: Developer
    Mode: Semi-auto
    Mode: Full-auto
-4. Developer mode means a human developer should code the task because autonomy risk is too high.
-5. Semi-auto mode means humans drive the workflow by comments.
-6. Full-auto mode means agents may dispatch the next PDLC command after each successful stage.
-7. If this is research, provide a useful research synthesis.
-8. If this is analyst stage, write concrete user stories, acceptance criteria, scope, assumptions, and questions.
-9. If this is architect stage, define affected areas, contracts, ADR need, security/data impact, and verification strategy.
-10. If this is planner stage, create a precise implementation handoff for the coding worker.
-11. Do not edit files, do not commit, do not push, and do not create a PR. The wrapper script manages git and PR updates.
+5. Developer mode means a human developer should code the task because autonomy risk is too high.
+6. Semi-auto mode means humans drive the workflow by comments.
+7. Full-auto mode means agents may dispatch the next PDLC command after each successful stage.
+8. If required information is missing and continuing would create weak or fake output, start with exactly: Status: BLOCKED_QUESTIONS
+9. When blocked, include a "Questions For User" section with numbered questions and do not include a next command.
+10. When not blocked, start with exactly: Status: READY
+11. Do not hide questions inside assumptions. Ask them explicitly and stop the process.
+12. Do not edit files, do not commit, do not push, and do not create a PR. The wrapper script manages git and PR updates.
+
+Stage artifact contract:
+~~~text
+$artifactRequirements
+~~~
 
 Expected output:
 - Markdown only.
-- Start with a short stage summary.
-- Include concrete decisions and open questions.
-- End with the next command in a fenced text block unless mode is Developer.
+- Polish business-facing content.
+- Concrete tables, examples, formulas, API shapes, story IDs, test cases, and decisions where relevant.
+- No placeholders, no "TBD", no generic AI filler.
+- Do not write a short summary instead of the artifact.
+- End with the next command in a fenced text block only when Status is READY and mode is not Developer.
 "@
 
 $allowedTools = "Read,Glob,Grep,LS,WebSearch,WebFetch,Bash(git status:*),Bash(git diff:*)"
@@ -552,6 +701,7 @@ if ($exitCode -ne 0) {
 }
 
 $mode = if ($stage.Key -eq "risk") { Get-AutonomyModeFromText -Text $claudeOutputText } else { Get-AutonomyModeFromIssue -IssueNumber $issue.number }
+$isBlockedByQuestions = Test-StageBlockedByQuestions -Text $claudeOutputText
 if ($stage.Key -eq "risk") {
     Set-AutonomyModeLabel -IssueNumber $issue.number -Mode $mode
 }
@@ -592,7 +742,27 @@ $prInfo = if ($branchContext.PrUrl) { $branchContext.PrUrl } else { (Get-PdlcPul
 $status = "PDLC stage '$($stage.Key)' updated PR context: $prInfo"
 Invoke-Checked "gh" "issue" "comment" "$($issue.number)" "--repo" $Repository "--body" $status
 
-if ($mode -eq "full-auto" -and -not [string]::IsNullOrWhiteSpace($stage.NextCommand)) {
+if ($isBlockedByQuestions) {
+    $questionBody = @"
+PDLC stage '$($stage.Key)' needs user answers before it can continue.
+
+PR context: $prInfo
+Artifact: `$stagePath`
+
+Please answer with this comment format:
+
+```text
+/pdlc answer
+stage: $($stage.Key)
+
+<your answers>
+```
+
+The agent will rerun the same stage and continue from the PR artifact context.
+"@
+    Invoke-Checked "gh" "issue" "comment" "$($issue.number)" "--repo" $Repository "--body" $questionBody
+}
+elseif ($mode -eq "full-auto" -and -not [string]::IsNullOrWhiteSpace($stage.NextCommand)) {
     $nextCommand = [string]$stage.NextCommand
     $nextBody = "Full-auto mode: dispatching next PDLC command $nextCommand for issue #$($issue.number)."
     Invoke-Checked "gh" "issue" "comment" "$($issue.number)" "--repo" $Repository "--body" $nextBody

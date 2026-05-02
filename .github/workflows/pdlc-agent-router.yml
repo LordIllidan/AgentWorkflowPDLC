@@ -1,6 +1,9 @@
 name: PDLC Agent Router
 
 on:
+  push:
+    branches:
+      - main
   issues:
     types:
       - opened
@@ -35,7 +38,7 @@ permissions:
   pull-requests: write
 
 concurrency:
-  group: pdlc-agent-router-${{ github.event.issue.number || github.event.pull_request.number || github.event.client_payload.issue_number || github.event.inputs.issue_number || github.run_id }}
+  group: pdlc-agent-router-${{ github.event.issue.number || github.event.pull_request.number || github.event.client_payload.issue_number || github.event.inputs.issue_number || github.event.head_commit.id || github.run_id }}
   cancel-in-progress: false
 
 jobs:
@@ -43,13 +46,11 @@ jobs:
     name: Decide PDLC agent route
     runs-on: ubuntu-latest
     outputs:
-      status: ${{ steps.route.outputs.status }}
-      analysis: ${{ steps.route.outputs.analysis }}
       riskAssessment: ${{ steps.route.outputs.riskAssessment }}
       stage: ${{ steps.route.outputs.stage }}
-      deterministicCoding: ${{ steps.route.outputs.deterministicCoding }}
       localCoding: ${{ steps.route.outputs.localCoding }}
       reviewFix: ${{ steps.route.outputs.reviewFix }}
+      issueNumber: ${{ steps.route.outputs.issueNumber }}
       reason: ${{ steps.route.outputs.reason }}
 
     steps:
@@ -62,40 +63,6 @@ jobs:
           GITHUB_EVENT_NAME: ${{ github.event_name }}
           GITHUB_EVENT_PATH: ${{ github.event_path }}
         run: node .github/scripts/pdlc-agent-router.mjs
-
-  issue-status:
-    name: Update issue status
-    needs: route
-    if: needs.route.outputs.status == 'true'
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout workflow repository
-        uses: actions/checkout@v4
-
-      - name: Update issue status
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-          GITHUB_EVENT_PATH: ${{ github.event_path }}
-        run: node .github/scripts/pdlc-issue-checklist.mjs
-
-  issue-analysis:
-    name: Analyze issue
-    needs: route
-    if: needs.route.outputs.analysis == 'true'
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout workflow repository
-        uses: actions/checkout@v4
-
-      - name: Analyze issue
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-          GITHUB_EVENT_PATH: ${{ github.event_path }}
-        run: node .github/scripts/pdlc-agent-analyze.mjs
 
   risk-assessment:
     name: Run initial autonomy risk assessment
@@ -175,61 +142,6 @@ jobs:
             -EventPath "${{ github.event_path }}" `
             -RunId "${{ github.run_id }}"
 
-  deterministic-coding:
-    name: Run deterministic coding agent
-    needs: route
-    if: needs.route.outputs.deterministicCoding == 'true'
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout default branch
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.repository.default_branch }}
-
-      - name: Prepare agent changes
-        id: prepare
-        env:
-          GITHUB_EVENT_PATH: ${{ github.event_path }}
-          GITHUB_RUN_ID: ${{ github.run_id }}
-        run: node .github/scripts/pdlc-agent-code.mjs
-
-      - name: Commit and push branch
-        env:
-          BRANCH_NAME: ${{ steps.prepare.outputs.branch }}
-          COMMIT_MESSAGE: ${{ steps.prepare.outputs.commit_message }}
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git switch -c "$BRANCH_NAME"
-          git add pdlc-runs sample-app
-          git commit -m "$COMMIT_MESSAGE"
-          git push -u origin "$BRANCH_NAME"
-
-      - name: Create pull request
-        id: create_pr
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_TITLE: ${{ steps.prepare.outputs.pr_title }}
-          BRANCH_NAME: ${{ steps.prepare.outputs.branch }}
-        run: |
-          pr_url="$(gh pr create --title "$PR_TITLE" --body-file .pdlc-pr-body.md --head "$BRANCH_NAME" --base "${{ github.event.repository.default_branch }}")"
-          echo "pr_url=$pr_url" >> "$GITHUB_OUTPUT"
-
-      - name: Comment PR link on issue
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_URL: ${{ steps.create_pr.outputs.pr_url }}
-        run: |
-          gh issue comment "${{ github.event.issue.number }}" --body "Coding agent created pull request: $PR_URL"
-
-      - name: Dispatch Sample App CI
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          BRANCH_NAME: ${{ steps.prepare.outputs.branch }}
-        run: |
-          gh workflow run sample-app-ci.yml --ref "$BRANCH_NAME"
-
   local-coding:
     name: Run local Claude Code coding worker
     needs: route
@@ -266,7 +178,7 @@ jobs:
           PDLC_AGENT_CONFIG_REF: ${{ vars.PDLC_AGENT_CONFIG_REF || 'main' }}
         run: |
           .\.github\scripts\pdlc-local-claude-worker.ps1 `
-            -IssueNumber ${{ github.event.issue.number || github.event.client_payload.issue_number || github.event.inputs.issue_number }} `
+            -IssueNumber ${{ needs.route.outputs.issueNumber || github.event.issue.number || github.event.client_payload.issue_number || github.event.inputs.issue_number }} `
             -Repository "${{ github.repository }}" `
             -BaseBranch "${{ github.event.repository.default_branch }}" `
             -RunId "${{ github.run_id }}"

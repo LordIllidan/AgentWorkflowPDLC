@@ -12,7 +12,7 @@ param(
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
-function Require-Command {
+function Test-RequiredCommand {
     param([Parameter(Mandatory = $true)][string]$Name)
 
     $command = Get-Command $Name -ErrorAction SilentlyContinue
@@ -151,15 +151,15 @@ function ConvertTo-MarkdownList {
     return (($Items | ForEach-Object { & $Formatter $_ }) -join "`n`n---`n`n")
 }
 
-Require-Command "git"
-Require-Command "gh"
-Require-Command "claude"
+Test-RequiredCommand "git"
+Test-RequiredCommand "gh"
+Test-RequiredCommand "claude"
 
 $model = if ($env:PDLC_CLAUDE_MODEL) { $env:PDLC_CLAUDE_MODEL } else { "sonnet" }
 $budget = if ($env:PDLC_CLAUDE_REVIEW_MAX_BUDGET_USD) { $env:PDLC_CLAUDE_REVIEW_MAX_BUDGET_USD } elseif ($env:PDLC_CLAUDE_MAX_BUDGET_USD) { $env:PDLC_CLAUDE_MAX_BUDGET_USD } else { "2" }
 
-$event = Get-Content -Raw -LiteralPath $EventPath | ConvertFrom-Json
-$prNumber = Get-EventPullRequestNumber -Event $event
+$eventPayload = Get-Content -Raw -LiteralPath $EventPath | ConvertFrom-Json
+$prNumber = Get-EventPullRequestNumber -Event $eventPayload
 $pr = gh pr view $prNumber --repo $Repository --json number,title,body,url,headRefName,baseRefName,headRepository,headRepositoryOwner,author | ConvertFrom-Json
 
 if ($pr.headRepository.nameWithOwner -ne $Repository) {
@@ -310,10 +310,8 @@ Local Claude review-fix worker pushed changes to this PR.
 - Worker output: ``$outputPath``
 - Agent config: `$($env:PDLC_AGENT_CONFIG_REPO)`
 - Run: $env:GITHUB_SERVER_URL/$Repository/actions/runs/$RunId
-- CI dispatch: `sample-app-ci.yml`
 "@
 
 Invoke-Checked "gh" "pr" "comment" "$prNumber" "--repo" $Repository "--body" $commentBody
-Invoke-Checked "gh" "workflow" "run" "sample-app-ci.yml" "--repo" $Repository "--ref" $($pr.headRefName)
 
 Write-Output "Pushed review fixes to PR #$prNumber."

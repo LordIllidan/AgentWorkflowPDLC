@@ -7,17 +7,16 @@ The current version is intentionally lightweight but now supports an automated i
 - GitHub Issue is the source of work.
 - Each PDLC stage is represented by a checklist item in the issue body.
 - `PDLC Agent Router` reads GitHub events and decides which agent job should run.
-- The analysis agent comments a proposed split for new PDLC issues.
-- Humans approve analysis by commenting `/approve analysis`.
-- The coding agent creates a branch, generated artifacts, and a PR.
+- A stage agent stops and asks questions in issue comments when required input is missing.
+- Users answer with `/pdlc answer` and the same stage continues from PR context.
 - Humans can use `/approve ai-coding` to run the local Claude Code worker on a self-hosted Windows runner.
 - Humans can use `/fix-review` on a PR to run the local Claude Code review-fix worker.
 - Claude Code workers fetch specialist agent prompts from `AgentWorkflowPDLC-AgentConfig` at startup.
 - Humans can drive separate PDLC stages with `/pdlc research`, `/pdlc analyze`, `/pdlc risk`, `/pdlc architecture`, and `/pdlc plan`.
 - A new issue first runs autonomy risk assessment and receives one of three labels: `pdlc-mode:developer`, `pdlc-mode:semi-auto`, or `pdlc-mode:full-auto`.
 - Stage agents maintain one long-lived PR per issue and write spec artifacts into `pdlc-runs/issue-<number>/`.
+- A user commit can trigger a stage with commit text like `[PDLC #16] /pdlc analyze`.
 - Pull requests link back to the issue and must include generated artifacts.
-- The release monitor runs after merge and can create follow-up issues.
 
 ## Workflow
 
@@ -48,7 +47,7 @@ flowchart TD
 Manual approval is done in two ways:
 
 - checklist approvals still document stage acceptance,
-- `/approve analysis` starts the coding agent and PR creation.
+- `/approve ai-coding` starts local AI implementation on the long-lived PR.
 
 The command-driven stage agents, local coding worker, and review-fix worker use Claude Code on the self-hosted Windows runner.
 
@@ -61,18 +60,11 @@ The command-driven stage agents, local coding worker, and review-fix worker use 
     config.yml
   scripts/
     pdlc-agent-router.mjs
-    pdlc-agent-analyze.mjs
-    pdlc-agent-code.mjs
     pdlc-local-claude-stage-worker.ps1
     pdlc-local-claude-worker.ps1
     pdlc-local-claude-review-fix-worker.ps1
-    pdlc-issue-checklist.mjs
-    pdlc-release-monitor.mjs
-    pdlc-research-agent.mjs
   workflows/
     pdlc-agent-router.yml
-    pdlc-release-monitor.yml
-    pdlc-research-agent.yml
   pull_request_template.md
 docs/
   automated-agent-loop.md
@@ -91,13 +83,13 @@ docs/
 
 1. Create a new issue using the `PDLC Agent Task` template.
 2. Fill business input in Polish.
-3. Wait for the analysis agent comment.
-4. Drive the staged flow with `/pdlc research`, `/pdlc analyze`, `/pdlc risk`, `/pdlc architecture`, and `/pdlc plan`.
-5. Comment `/approve analysis` for the deterministic worker or `/approve ai-coding` for the local Claude Code worker.
-6. Review the PR created by the coding agent.
-7. Comment `/fix-review` on the PR when review feedback should be addressed by the local Claude Code worker.
-8. Merge the PR after CI and human approval.
-9. Check the release monitoring comment or follow-up issue.
+3. Wait for the autonomy risk label and the long-lived PDLC PR.
+4. Drive the staged flow with `/pdlc research`, `/pdlc analyze`, `/pdlc risk`, `/pdlc architecture`, and `/pdlc plan`, or let `pdlc-mode:full-auto` continue automatically.
+5. If an agent asks questions, answer with `/pdlc answer` and `stage: <stage>`.
+6. Comment `/approve ai-coding` for the local Claude Code worker.
+7. Review the PR created by the PDLC agents.
+8. Comment `/fix-review` on the PR when review feedback should be addressed by the local Claude Code worker.
+9. Merge the PR after human approval.
 
 See `docs/automated-agent-loop.md` for the automated flow details.
 See `docs/local-claude-code-worker.md` for the self-hosted Claude Code worker.

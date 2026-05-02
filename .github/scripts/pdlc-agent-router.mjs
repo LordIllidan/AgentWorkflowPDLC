@@ -8,6 +8,21 @@ const stageCommands = [
   "/pdlc plan",
 ];
 
+function getPdlcCommandFromPush(event) {
+  const message = event.head_commit?.message ?? "";
+  const issueMatch = message.match(/(?:issue|#)\s*#?(\d+)/i);
+  const commandMatch = message.match(/\/pdlc\s+(?:research|analyze|risk|architecture|plan)|\/approve\s+ai-coding/i);
+
+  if (!issueMatch || !commandMatch) {
+    return null;
+  }
+
+  return {
+    issueNumber: issueMatch[1],
+    command: commandMatch[0],
+  };
+}
+
 function requireEnv(name) {
   const value = process.env[name];
   if (!value) {
@@ -31,24 +46,24 @@ function containsCommand(value, command) {
 
 function routeEvent(eventName, event) {
   const route = {
-    status: false,
-    analysis: false,
     riskAssessment: false,
     stage: false,
-    deterministicCoding: false,
     localCoding: false,
     reviewFix: false,
+    issueNumber: "",
     reason: "No route matched.",
   };
 
   if (eventName === "repository_dispatch" && event.action === "pdlc_issue_created") {
     route.riskAssessment = true;
+    route.issueNumber = event.client_payload?.issue_number ?? "";
     route.reason = "Research-created issue dispatch should run autonomy risk assessment.";
     return route;
   }
 
   if (eventName === "repository_dispatch" && event.action === "pdlc_stage_command") {
     const command = event.client_payload?.command ?? "";
+    route.issueNumber = event.client_payload?.issue_number ?? "";
     if (startsWithAny(command, stageCommands)) {
       route.stage = true;
       route.reason = "Repository dispatch requested a PDLC stage agent.";
@@ -67,6 +82,7 @@ function routeEvent(eventName, event) {
 
   if (eventName === "workflow_dispatch") {
     const command = event.inputs?.command ?? "";
+    route.issueNumber = event.inputs?.issue_number ?? "";
     if (startsWithAny(command, stageCommands)) {
       route.stage = true;
       route.reason = "Workflow dispatch requested a PDLC stage agent.";
@@ -83,26 +99,50 @@ function routeEvent(eventName, event) {
     return route;
   }
 
+  if (eventName === "push") {
+    const pdlcCommand = getPdlcCommandFromPush(event);
+    if (!pdlcCommand) {
+      route.reason = "Push did not contain a supported PDLC command format.";
+      return route;
+    }
+
+    route.issueNumber = pdlcCommand.issueNumber;
+
+    if (startsWithAny(pdlcCommand.command, stageCommands)) {
+      route.stage = true;
+      route.reason = "Push commit message requested a PDLC stage agent.";
+      return route;
+    }
+
+    if (pdlcCommand.command.trim().toLowerCase().startsWith("/approve ai-coding")) {
+      route.localCoding = true;
+      route.reason = "Push commit message approved local Claude Code implementation.";
+      return route;
+    }
+
+    return route;
+  }
+
   if (eventName === "issues") {
     if (isPullRequestIssue(event.issue)) {
       route.reason = "Issue event belongs to a pull request.";
       return route;
     }
 
-    route.status = true;
+    route.issueNumber = event.issue?.number ?? "";
     if (event.action === "opened") {
       route.riskAssessment = true;
       route.reason = "New issue should refresh status and run autonomy risk assessment.";
       return route;
     }
 
-    route.analysis = true;
-    route.reason = "Normal issue lifecycle event should refresh status and analysis.";
+    route.reason = "Issue lifecycle event did not require an AI agent.";
     return route;
   }
 
   if (eventName === "issue_comment") {
     const body = event.comment?.body ?? "";
+    route.issueNumber = event.issue?.number ?? "";
 
     if (isPullRequestIssue(event.issue)) {
       if (containsCommand(body, "/fix-review")) {
@@ -114,7 +154,7 @@ function routeEvent(eventName, event) {
       return route;
     }
 
-    if (startsWithAny(body, stageCommands)) {
+    if (startsWithAny(body, stageCommands) || body.trim().toLowerCase().startsWith("/pdlc answer")) {
       route.stage = true;
       route.reason = "Issue comment requested a PDLC stage agent.";
       return route;
@@ -123,12 +163,6 @@ function routeEvent(eventName, event) {
     if (body.trim().toLowerCase().startsWith("/approve ai-coding")) {
       route.localCoding = true;
       route.reason = "Issue comment approved local Claude Code implementation.";
-      return route;
-    }
-
-    if (body.trim().toLowerCase().startsWith("/approve analysis")) {
-      route.deterministicCoding = true;
-      route.reason = "Issue comment approved deterministic coding.";
       return route;
     }
 

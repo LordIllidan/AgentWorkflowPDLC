@@ -203,6 +203,19 @@ $(Get-Content -Raw -LiteralPath $_.FullName)
     }) -join "`n`n---`n`n")
 }
 
+function Get-IssueCommentContext {
+    param([Parameter(Mandatory = $true)][int]$IssueNumber)
+
+    $comments = @(gh api "repos/$Repository/issues/$IssueNumber/comments?per_page=100" | ConvertFrom-Json)
+    if ($comments.Count -eq 0) {
+        return "No issue comments found."
+    }
+
+    return (($comments | Select-Object -Last 20 | ForEach-Object {
+        "Author: $($_.user.login)`nCreated: $($_.created_at)`n`n$($_.body)"
+    }) -join "`n`n---`n`n")
+}
+
 function Initialize-PdlcBranch {
     param(
         [Parameter(Mandatory = $true)]$Issue,
@@ -291,6 +304,7 @@ $agentConfigContext = Get-AgentConfigContext -RunId $RunId -Purpose "issue-codin
 $branchContext = Initialize-PdlcBranch -Issue $issue -BaseBranch $BaseBranch
 Write-IssueContextFile -Issue $issue -RunDirectory $runDirectory
 $artifactContext = Get-PdlcArtifactContext -RunDirectory $runDirectory
+$commentContext = Get-IssueCommentContext -IssueNumber $IssueNumber
 
 $prompt = @"
 You are the PDLC Coding Agent running locally on the user's Windows workstation through a GitHub self-hosted runner.
@@ -311,6 +325,11 @@ PDLC artifact files from the PR branch:
 $artifactContext
 ~~~
 
+Recent issue comments and user answers:
+~~~markdown
+$commentContext
+~~~
+
 Fetched agent configuration:
 ~~~markdown
 $agentConfigContext
@@ -320,17 +339,22 @@ Task:
 1. Continue the existing long-lived PDLC PR for this issue.
 2. Implement the requested code change in this repository.
 3. Use pdlc-runs/issue-$IssueNumber/ as the primary source of scope, risk, architecture, and implementation plan.
-4. Keep changes scoped to the issue.
-5. Add or update focused tests when the code change affects behavior.
-6. Add or update documentation only when needed for this feature.
-7. Do not merge, do not push, and do not create a pull request. The wrapper script will commit, push, and create a PR only if one does not exist.
-8. Do not read or print secrets.
-9. Avoid destructive git commands.
-10. Before finishing, inspect the diff and leave the workspace ready to commit.
-11. State which external agent configuration and specialist agents you used.
+4. If the PR artifacts contain unresolved questions that block implementation, do not fake assumptions. Start the output with exactly: Status: BLOCKED_QUESTIONS and list questions for the user.
+5. If implementation can proceed, start the output with exactly: Status: READY.
+6. Keep changes scoped to the issue.
+7. Add or update focused tests when the code change affects behavior.
+8. Add or update documentation for the feature assumptions and example inputs.
+9. Implement real code changes, not only PDLC artifacts.
+10. Do not merge, do not push, and do not create a pull request. The wrapper script will commit, push, and create a PR only if one does not exist.
+11. Do not read or print secrets.
+12. Avoid destructive git commands.
+13. Before finishing, inspect the diff and leave the workspace ready to commit.
+14. State which external agent configuration and specialist agents you used.
 
 Expected output:
-- Concise summary of changed files.
+- Status: READY or Status: BLOCKED_QUESTIONS.
+- Changed files with purpose.
+- Implemented algorithms/contracts/tests/docs.
 - Verification commands you ran or intentionally skipped.
 - Any remaining risks or follow-up notes.
 "@
@@ -349,6 +373,7 @@ $claudeArgs = @(
 
 $claudeOutput = $prompt | & claude @claudeArgs 2>&1
 $exitCode = $LASTEXITCODE
+$claudeOutputText = ($claudeOutput | ForEach-Object { $_.ToString() }) -join "`n"
 
 $output = @"
 # Claude Code Worker Output
@@ -361,7 +386,7 @@ Branch: $($branchContext.BranchName)
 ## Claude Output
 
 ~~~text
-$claudeOutput
+$claudeOutputText
 ~~~
 "@
 Write-Utf8File -Path $outputPath -Content $output
@@ -369,6 +394,30 @@ Write-Utf8File -Path $outputPath -Content $output
 if ($exitCode -ne 0) {
     gh issue comment $IssueNumber --repo $Repository --body "Claude Code worker failed before PR update. Run: $env:GITHUB_SERVER_URL/$Repository/actions/runs/$RunId"
     throw "Claude Code exited with code $exitCode."
+}
+
+if ($claudeOutputText -match "(?im)^\s*Status\s*:\s*BLOCKED_QUESTIONS\s*$") {
+    $questionBody = @"
+PDLC coding worker needs user answers before implementation can continue.
+
+PR context: $($branchContext.PrUrl)
+
+Please answer in an issue comment and rerun coding with:
+
+```text
+/approve ai-coding
+
+<your answers>
+```
+
+Worker questions:
+
+```text
+$claudeOutputText
+```
+"@
+    gh issue comment $IssueNumber --repo $Repository --body $questionBody
+    throw "Claude Code worker blocked on user questions."
 }
 
 $implementationArtifact = @"
@@ -382,7 +431,7 @@ Model: $model
 ## Worker Output
 
 ~~~text
-$claudeOutput
+$claudeOutputText
 ~~~
 "@
 Write-Utf8File -Path $implementationPath -Content $implementationArtifact
@@ -407,6 +456,5 @@ else {
 
 $prInfo = if ($branchContext.PrUrl) { $branchContext.PrUrl } else { (Get-PdlcPullRequestForIssue -IssueNumber $IssueNumber).url }
 Invoke-Checked "gh" "issue" "comment" "$IssueNumber" "--repo" $Repository "--body" "Local Claude Code worker updated PDLC pull request: $prInfo"
-Invoke-Checked "gh" "workflow" "run" "sample-app-ci.yml" "--repo" $Repository "--ref" $branchContext.BranchName
 
 Write-Output "Updated pull request: $prInfo"
