@@ -92,8 +92,8 @@ function Get-AgentConfig {
         Remove-Item -Recurse -Force -LiteralPath $cachePath
     }
 
-    Invoke-Checked "gh" "repo" "clone" $configRepo $cachePath
-    Invoke-Checked "git" "-C" $cachePath "checkout" $configRef
+    Invoke-Checked "gh" "repo" "clone" $configRepo $cachePath | Out-Null
+    Invoke-Checked "git" "-C" $cachePath "checkout" $configRef | Out-Null
 
     $manifestPath = Join-Path $cachePath "agents/manifest.json"
     $manifest = Get-Content -Raw -LiteralPath $manifestPath | ConvertFrom-Json
