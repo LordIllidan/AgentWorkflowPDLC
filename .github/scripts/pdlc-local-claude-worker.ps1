@@ -74,6 +74,24 @@ function Enable-LocalGitCredentialsForPush {
     $env:GIT_TERMINAL_PROMPT = "0"
 }
 
+function ConvertTo-PdlcArtifactMarkdown {
+    param($Comments)
+
+    $artifactComments = @(
+        $Comments | Where-Object {
+            $_.body -like "*<!-- pdlc-stage-*" -or $_.body -like "*<!-- pdlc-agent-analysis -->*"
+        } | Sort-Object created_at
+    )
+
+    if ($artifactComments.Count -eq 0) {
+        return "No prior PDLC stage artifacts were found."
+    }
+
+    return (($artifactComments | ForEach-Object {
+        "Author: $($_.user.login)`nCreated: $($_.created_at)`n`n$($_.body)"
+    }) -join "`n`n---`n`n")
+}
+
 function Get-AgentConfigContext {
     param(
         [Parameter(Mandatory = $true)][string]$RunId,
@@ -151,6 +169,7 @@ $issue = gh issue view $IssueNumber --repo $Repository --json number,title,body,
 $comments = gh api "repos/$Repository/issues/$IssueNumber/comments?per_page=100" | ConvertFrom-Json
 $analysisComment = $comments | Where-Object { $_.body -like "*<!-- pdlc-agent-analysis -->*" } | Select-Object -Last 1
 $analysisBody = if ($analysisComment) { $analysisComment.body } else { "No prior analysis comment was found." }
+$stageArtifacts = ConvertTo-PdlcArtifactMarkdown -Comments $comments
 $agentConfigContext = Get-AgentConfigContext -RunId $RunId -Purpose "issue-coding"
 
 $slug = ConvertTo-Slug -Value $issue.title
@@ -185,6 +204,11 @@ PDLC analysis comment:
 $analysisBody
 ```
 
+PDLC stage artifacts:
+```markdown
+$stageArtifacts
+```
+
 Fetched agent configuration:
 ```markdown
 $agentConfigContext
@@ -200,6 +224,7 @@ Task:
 7. Avoid destructive git commands.
 8. Before finishing, inspect the diff and leave the workspace ready to commit.
 9. State which external agent configuration and specialist agents you used.
+10. Use the PDLC stage artifacts as the primary source of scope, risk, architecture, and implementation plan.
 
 Expected output:
 - Concise summary of changed files.

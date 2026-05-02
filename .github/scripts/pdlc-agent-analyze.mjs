@@ -65,13 +65,23 @@ ${acceptanceCriteria}
 
 ### Next human action
 
-Review this analysis. If it is acceptable, add a comment:
+For the full staged PDLC flow, run these issue comments in order:
 
 \`\`\`text
-/approve analysis
+/pdlc research
+/pdlc analyze
+/pdlc risk
+/pdlc architecture
+/pdlc plan
 \`\`\`
 
-The coding agent will then create a branch, generate PDLC artifacts, update the sample app documentation, and open a pull request.`;
+If the staged artifacts are acceptable and the risk decision allows agent implementation, add a comment:
+
+\`\`\`text
+/approve ai-coding
+\`\`\`
+
+The local Claude Code worker will then create a branch, use the PDLC artifacts as context, implement code and documentation, and open a pull request.`;
 }
 
 async function githubRequest(path, options = {}) {

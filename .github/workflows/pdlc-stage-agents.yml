@@ -1,0 +1,41 @@
+name: PDLC Stage Agents
+
+on:
+  issue_comment:
+    types:
+      - created
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  run-stage-agent:
+    name: Run command-driven PDLC stage agent
+    runs-on: ubuntu-latest
+    if: >
+      github.event.issue.pull_request == null &&
+      (startsWith(github.event.comment.body, '/pdlc research') ||
+       startsWith(github.event.comment.body, '/pdlc analyze') ||
+       startsWith(github.event.comment.body, '/pdlc risk') ||
+       startsWith(github.event.comment.body, '/pdlc architecture') ||
+       startsWith(github.event.comment.body, '/pdlc plan'))
+
+    steps:
+      - name: Checkout workflow repository
+        uses: actions/checkout@v4
+
+      - name: Checkout agent configuration
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.PDLC_AGENT_CONFIG_REPO || 'LordIllidan/AgentWorkflowPDLC-AgentConfig' }}
+          ref: ${{ vars.PDLC_AGENT_CONFIG_REF || 'main' }}
+          path: .pdlc-agent-config
+
+      - name: Run stage agent
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_EVENT_PATH: ${{ github.event_path }}
+          PDLC_AGENT_CONFIG_DIR: .pdlc-agent-config
+        run: node .github/scripts/pdlc-stage-agent.mjs

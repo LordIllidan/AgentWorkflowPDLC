@@ -34,6 +34,11 @@ Pin `PDLC_AGENT_CONFIG_REF` to a tag or commit when reproducibility matters.
 
 The first configuration repository version includes:
 
+- research agent,
+- analyst agent,
+- autonomy risk agent,
+- architect agent,
+- planner agent,
 - Angular agent,
 - Java agent,
 - .NET agent,
@@ -41,6 +46,16 @@ The first configuration repository version includes:
 - security agent,
 - worker startup policy,
 - MCP configuration example without secrets.
+
+Stage agents are used by `.github/workflows/pdlc-stage-agents.yml` for issue comments:
+
+```text
+/pdlc research
+/pdlc analyze
+/pdlc risk
+/pdlc architecture
+/pdlc plan
+```
 
 ## Safety Rules
 

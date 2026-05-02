@@ -4,13 +4,16 @@
 
 This document describes the MVP loop where GitHub Issues drive automated PDLC agent work:
 
-1. Research agent creates new feature proposal issues.
-2. Analysis agent reads a PDLC issue, splits the change, and posts an analysis comment.
-3. Human approves the analysis with `/approve analysis`.
-4. Coding agent creates a branch, writes PDLC artifacts, updates the sample app documentation, and opens a PR.
-5. Human reviews the PR and can ask the local review-fix worker to address feedback with `/fix-review`.
-6. Human merges the PR.
-7. Release monitor runs after merge and creates a follow-up issue when a deployment failure signal is present.
+1. Research agent creates or enriches feature proposal issues.
+2. Analyst agent turns the issue into user stories, acceptance criteria, scope, and questions.
+3. Autonomy Risk agent decides whether the feature can be implemented by an agent or should go to a human developer.
+4. Architect agent defines affected areas, contracts, ADR needs, and technical boundaries.
+5. Planner agent prepares the implementation handoff.
+6. Human approves implementation with `/approve analysis` or `/approve ai-coding`.
+7. Coding agent creates a branch, writes PDLC artifacts, updates code/docs, and opens a PR.
+8. Human reviews the PR and can ask the local review-fix worker to address feedback with `/fix-review`.
+9. Human merges the PR.
+10. Release monitor runs after merge and creates a follow-up issue when a deployment failure signal is present.
 
 The current implementation is deterministic and does not call an LLM. This keeps the workflow testable before adding Copilot, an LLM API, or MCP tools.
 
@@ -28,6 +31,22 @@ Output:
 - a new issue labeled `pdlc`, `agent-workflow`, and `research-proposal`,
 - issue body compatible with the PDLC approval checklist,
 - automatic analysis by the analysis agent after issue creation.
+
+## Command-Driven Stage Agents
+
+Workflow: `.github/workflows/pdlc-stage-agents.yml`
+
+Supported issue comments:
+
+```text
+/pdlc research
+/pdlc analyze
+/pdlc risk
+/pdlc architecture
+/pdlc plan
+```
+
+Each command creates or updates a marked issue comment. These comments become PDLC artifacts consumed by the local Claude Code worker.
 
 ## Step 1: Analysis Agent
 
@@ -67,6 +86,17 @@ To route implementation to the local Claude Code worker running on the user's se
 
 PR approval and merge remain normal GitHub human review steps.
 
+Recommended full staged path before local AI coding:
+
+```text
+/pdlc research
+/pdlc analyze
+/pdlc risk
+/pdlc architecture
+/pdlc plan
+/approve ai-coding
+```
+
 ## Step 2: Coding Agent
 
 Workflow: `.github/workflows/pdlc-agent-coding.yml`
@@ -98,6 +128,7 @@ Output:
 - branch named `agent/claude-issue-<number>-<slug>-<run-id>`,
 - Claude Code prompt and output under `pdlc-runs/issue-<number>/`,
 - code changes produced by local Claude Code,
+- prior PDLC stage artifacts injected into the Claude Code prompt,
 - pull request linked to the source issue,
 - comment on the source issue with the PR URL.
 
@@ -141,7 +172,7 @@ Failure signals in the MVP:
 
 ## Current Limitations
 
-- The agents are deterministic scripts, not LLM agents.
+- The command-driven stage agents currently render deterministic artifacts from issue context and external prompt configuration.
 - The release monitor does not check a real deployment endpoint yet.
 - The coding agent makes a safe documentation-level sample app change.
 - Role-based approval is not enforced yet; approvals are visible in GitHub audit history.
