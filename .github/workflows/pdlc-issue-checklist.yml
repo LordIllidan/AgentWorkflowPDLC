@@ -8,22 +8,20 @@ on:
       - reopened
       - labeled
       - unlabeled
-  issue_comment:
-    types:
-      - created
-      - edited
 
 permissions:
   issues: write
   contents: read
 
+concurrency:
+  group: pdlc-issue-checklist-${{ github.event.issue.number || github.run_id }}
+  cancel-in-progress: false
+
 jobs:
   update-pdlc-status:
     name: Update PDLC status comment
     runs-on: ubuntu-latest
-    if: >
-      github.event_name == 'issues' ||
-      (github.event_name == 'issue_comment' && github.event.issue.pull_request == null)
+    if: github.event.issue.pull_request == null
 
     steps:
       - name: Checkout

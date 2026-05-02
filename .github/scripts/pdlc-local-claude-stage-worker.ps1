@@ -67,6 +67,16 @@ function Get-StageDefinition {
     throw "No supported /pdlc stage command found in comment."
 }
 
+function Test-IsPullRequestIssue {
+    param($Issue)
+
+    if (-not $Issue) {
+        return $false
+    }
+
+    return @($Issue.PSObject.Properties.Name) -contains "pull_request"
+}
+
 function Get-AgentConfig {
     param(
         [Parameter(Mandatory = $true)][string]$AgentId,
@@ -158,7 +168,7 @@ $eventPayload = Get-Content -Raw -LiteralPath $EventPath | ConvertFrom-Json
 $issue = $eventPayload.issue
 $comment = $eventPayload.comment
 
-if (-not $issue -or $issue.pull_request -or -not $comment) {
+if (-not $issue -or (Test-IsPullRequestIssue -Issue $issue) -or -not $comment) {
     Write-Output "No normal issue comment event to process."
     exit 0
 }
