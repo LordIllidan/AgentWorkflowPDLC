@@ -75,9 +75,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-      - name: npm install
+          cache: npm
+          cache-dependency-path: sample-app/angular-frontend/package-lock.json
+      - name: npm ci
         id: npm_install
-        run: npm install
+        run: npm ci
       - name: npm run build
         id: npm_build
         run: npm run build
@@ -98,7 +100,7 @@ jobs:
             echo "## Angular frontend — co poszło nie tak"
             echo ""
             if [ "${{ steps.npm_install.outcome }}" = "failure" ]; then
-              echo "Padł krok: **npm install** (zależności / sieć / registry)."
+              echo "Padł krok: **npm ci** (lockfile vs package.json, sieć, registry)."
             elif [ "${{ steps.npm_build.outcome }}" = "failure" ]; then
               echo "Padł krok: **npm run build** (TypeScript / Angular compile)."
             else
@@ -110,5 +112,5 @@ jobs:
               echo "- Błąd \`No provider for HttpClient\`: w teście dodaj \`provideHttpClient()\` / mock \`HttpClient\` w \`TestBed\`."
             fi
             echo ""
-            echo "Lokalnie: \`cd sample-app/angular-frontend\` → \`npm install\` → \`npm run build\` → \`CI=true npm run test:ci\`."
+            echo "Lokalnie: \`cd sample-app/angular-frontend\` → \`npm ci\` → \`npm run build\` → \`CI=true npm run test:ci\`."
           } >> "$GITHUB_STEP_SUMMARY"
