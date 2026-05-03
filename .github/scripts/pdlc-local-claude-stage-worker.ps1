@@ -250,26 +250,90 @@ function Test-StageBlockedByQuestions {
     return $Text -match "(?im)^\s*Status\s*:\s*BLOCKED_QUESTIONS\s*$"
 }
 
-function Test-StageArtifactQuality {
+function Get-TextExcerpt {
+    param(
+        [Parameter(Mandatory = $true)][string]$Text,
+        [int]$MaxLength = 4000
+    )
+
+    if ($Text.Length -le $MaxLength) {
+        return $Text
+    }
+
+    return "$($Text.Substring(0, $MaxLength))`n`n... truncated ..."
+}
+
+function Get-StageArtifactQualityIssues {
     param(
         [Parameter(Mandatory = $true)][string]$Text,
         [Parameter(Mandatory = $true)][string]$StageKey
     )
 
+    $issues = @()
     $trimmed = $Text.Trim()
     if ([string]::IsNullOrWhiteSpace($trimmed)) {
-        return $false
+        $issues += "Artifact output is empty."
+        return $issues
     }
 
     if ($trimmed -match "(?im)^\s*(artifact written|summary\s*:)|artifact written to|artifact written\.") {
-        return $false
+        $issues += "Artifact output looks like a meta-summary instead of the document body."
     }
 
     if ($StageKey -eq "risk") {
-        return $trimmed -match "(?im)^\s*Mode\s*:\s*(Developer|Semi-auto|Full-auto)\s*$" -and $trimmed.Length -ge 1000
+        if ($trimmed -notmatch "(?im)^\s*Mode\s*:\s*(Developer|Semi-auto|Full-auto)\s*$") {
+            $issues += "Risk artifact is missing a required Mode line."
+        }
+        if ($trimmed.Length -lt 1000) {
+            $issues += "Risk artifact is too short. Minimum length is 1000 characters; actual length is $($trimmed.Length)."
+        }
+
+        return $issues
     }
 
-    return $trimmed -match "(?im)\A\s*Status\s*:\s*(READY|BLOCKED_QUESTIONS)\s*$" -and $trimmed.Length -ge 2000
+    if ($trimmed -notmatch "(?im)\A\s*Status\s*:\s*(READY|BLOCKED_QUESTIONS)\s*$") {
+        $issues += "Stage artifact must start with Status: READY or Status: BLOCKED_QUESTIONS."
+    }
+    if ($trimmed.Length -lt 2000) {
+        $issues += "Stage artifact is too short. Minimum length is 2000 characters; actual length is $($trimmed.Length)."
+    }
+
+    return $issues
+}
+
+function Write-QualityGateDiagnostic {
+    param(
+        [Parameter(Mandatory = $true)]$Issue,
+        [Parameter(Mandatory = $true)][string]$Repository,
+        [Parameter(Mandatory = $true)]$Stage,
+        [Parameter(Mandatory = $true)][string]$RunUrl,
+        [Parameter(Mandatory = $true)][string[]]$QualityIssues,
+        [Parameter(Mandatory = $true)][string]$OutputText,
+        [Parameter(Mandatory = $true)][string]$Prefix
+    )
+
+    $issueList = ($QualityIssues | ForEach-Object { "- $_" }) -join "`n"
+    $excerpt = Get-TextExcerpt -Text $OutputText -MaxLength 3500
+    $body = @"
+$Prefix
+
+Stage: $($Stage.Key)
+Run: $RunUrl
+
+Quality gate reasons:
+$issueList
+
+Output excerpt:
+~~~markdown
+$excerpt
+~~~
+"@
+
+    if ($env:GITHUB_STEP_SUMMARY) {
+        Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value $body
+    }
+
+    Invoke-Checked "gh" "issue" "comment" "$($Issue.number)" "--repo" $Repository "--body" $body
 }
 
 function Get-AgentConfig {
@@ -717,27 +781,63 @@ $claudeArgs = @(
 $claudeOutput = $prompt | & claude @claudeArgs 2>&1
 $exitCode = $LASTEXITCODE
 $claudeOutputText = ($claudeOutput | ForEach-Object { $_.ToString() }) -join "`n"
+$runUrl = "$env:GITHUB_SERVER_URL/$Repository/actions/runs/$RunId"
 
 if ($exitCode -ne 0) {
-    gh issue comment $issue.number --repo $Repository --body "Local Claude stage worker failed. Run: $env:GITHUB_SERVER_URL/$Repository/actions/runs/$RunId"
+    $failureExcerpt = Get-TextExcerpt -Text $claudeOutputText -MaxLength 3500
+    $failureBody = @"
+Local Claude stage worker failed.
+
+Stage: $($stage.Key)
+Run: $runUrl
+
+Claude output excerpt:
+~~~text
+$failureExcerpt
+~~~
+"@
+    gh issue comment $issue.number --repo $Repository --body $failureBody
     throw "Claude Code exited with code $exitCode."
 }
 
-if (-not (Test-StageArtifactQuality -Text $claudeOutputText -StageKey $stage.Key)) {
+$qualityIssues = @(Get-StageArtifactQualityIssues -Text $claudeOutputText -StageKey $stage.Key)
+if ($qualityIssues.Count -gt 0) {
+    $outputExcerpt = Get-TextExcerpt -Text $claudeOutputText -MaxLength 2500
+    $qualityIssueText = ($qualityIssues | ForEach-Object { "- $_" }) -join "`n"
     $retryPrompt = @"
-$prompt
+You are rerunning the $($stage.Title) artifact generation because the previous response failed the PDLC quality gate.
 
-Previous response was rejected by the PDLC quality gate because it was not a complete artifact.
+Issue #$($issue.number): $($issue.title)
+Artifact file target: $stagePath
+Next suggested command: $($stage.NextCommand)
 
-Rejected response:
-~~~markdown
-$claudeOutputText
+Quality gate reasons:
+$qualityIssueText
+
+Stage artifact contract:
+~~~text
+$artifactRequirements
 ~~~
 
-Rewrite the answer now as the complete Markdown artifact content.
-Do not say that an artifact was written.
-Do not summarize what would be in the artifact.
-Return the artifact body itself.
+Issue body:
+~~~markdown
+$($issue.body)
+~~~
+
+Prior PDLC artifact context:
+~~~markdown
+$priorArtifacts
+~~~
+
+Previous output excerpt:
+~~~markdown
+$outputExcerpt
+~~~
+
+Return only the complete Markdown artifact body in Polish.
+Do not mention that an artifact was written.
+Do not summarize what should be in the artifact.
+Start with the exact required status line for this stage.
 "@
 
     $retryOutput = $retryPrompt | & claude @claudeArgs 2>&1
@@ -745,13 +845,14 @@ Return the artifact body itself.
     $claudeOutputText = ($retryOutput | ForEach-Object { $_.ToString() }) -join "`n"
 
     if ($retryExitCode -ne 0) {
-        gh issue comment $issue.number --repo $Repository --body "Local Claude stage worker failed during artifact quality retry. Run: $env:GITHUB_SERVER_URL/$Repository/actions/runs/$RunId"
+        Write-QualityGateDiagnostic -Issue $issue -Repository $Repository -Stage $stage -RunUrl $runUrl -QualityIssues $qualityIssues -OutputText $claudeOutputText -Prefix "Local Claude stage worker failed during artifact quality retry."
         throw "Claude Code exited with code $retryExitCode during artifact quality retry."
     }
 }
 
-if (-not (Test-StageArtifactQuality -Text $claudeOutputText -StageKey $stage.Key)) {
-    gh issue comment $issue.number --repo $Repository --body "PDLC stage '$($stage.Key)' stopped because the generated artifact did not pass the quality gate. Run: $env:GITHUB_SERVER_URL/$Repository/actions/runs/$RunId"
+$qualityIssues = @(Get-StageArtifactQualityIssues -Text $claudeOutputText -StageKey $stage.Key)
+if ($qualityIssues.Count -gt 0) {
+    Write-QualityGateDiagnostic -Issue $issue -Repository $Repository -Stage $stage -RunUrl $runUrl -QualityIssues $qualityIssues -OutputText $claudeOutputText -Prefix "PDLC stage '$($stage.Key)' stopped because the generated artifact did not pass the quality gate."
     throw "Generated $($stage.Key) artifact did not pass the quality gate."
 }
 
