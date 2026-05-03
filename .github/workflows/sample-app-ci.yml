@@ -1,0 +1,63 @@
+name: Sample app CI
+
+on:
+  pull_request:
+    paths:
+      - "sample-app/dotnet-api/**"
+      - "sample-app/angular-frontend/**"
+      - ".github/workflows/sample-app-ci.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  changes:
+    name: Detect changed sample apps
+    runs-on: ubuntu-latest
+    outputs:
+      dotnet: ${{ steps.filter.outputs.dotnet }}
+      angular: ${{ steps.filter.outputs.angular }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            dotnet:
+              - 'sample-app/dotnet-api/**'
+            angular:
+              - 'sample-app/angular-frontend/**'
+
+  dotnet-api:
+    name: .NET API — build
+    needs: changes
+    if: needs.changes.outputs.dotnet == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sample-app/dotnet-api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - run: dotnet restore
+      - run: dotnet build --configuration Release --no-restore
+
+  angular-frontend:
+    name: Angular frontend — build & unit tests
+    needs: changes
+    if: needs.changes.outputs.angular == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sample-app/angular-frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm install
+      - run: npm run build
+      - run: npm run test
+
