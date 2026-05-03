@@ -4,6 +4,7 @@ target/
 node_modules/
 dist/
 .angular/
+sample-app/angular-frontend/reports/
 .idea/
 .vscode/
 *.log

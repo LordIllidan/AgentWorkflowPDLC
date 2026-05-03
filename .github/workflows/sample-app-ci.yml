@@ -41,8 +41,24 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "8.0.x"
-      - run: dotnet restore
-      - run: dotnet build --configuration Release --no-restore
+      - name: dotnet restore
+        id: restore
+        run: dotnet restore -v minimal
+      - name: dotnet build (Release)
+        id: build
+        run: dotnet build --configuration Release --no-restore -v minimal
+      - name: Diagnostyka przy błędzie builda
+        if: failure()
+        run: |
+          {
+            echo "## .NET API — co poszło nie tak"
+            echo ""
+            echo "Ostatni nieudany krok: **${{ steps.restore.outcome == 'failure' && 'dotnet restore' || 'dotnet build' }}**."
+            echo ""
+            echo "- Pełny log kompilacji jest w kroku **dotnet build (Release)** powyżej."
+            echo "- Typowe przyczyny: brak SDK zgodnego z \`TargetFramework\`, błąd składni C#, brak pakietów NuGet."
+            echo "- Lokalnie: \`cd sample-app/dotnet-api\` → \`dotnet restore\` → \`dotnet build -c Release\`."
+          } >> "$GITHUB_STEP_SUMMARY"
 
   angular-frontend:
     name: Angular frontend — build & unit tests
@@ -52,12 +68,47 @@ jobs:
     defaults:
       run:
         working-directory: sample-app/angular-frontend
+    env:
+      CI: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-      - run: npm install
-      - run: npm run build
-      - run: npm run test
-
+      - name: npm install
+        id: npm_install
+        run: npm install
+      - name: npm run build
+        id: npm_build
+        run: npm run build
+      - name: npm run test (Vitest, CI reporters)
+        id: npm_test
+        run: npm run test:ci
+      - name: Artefakt — raport JUnit Vitest
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vitest-junit-${{ github.run_id }}
+          path: sample-app/angular-frontend/reports/vitest-junit.xml
+          if-no-files-found: warn
+      - name: Diagnostyka przy błędzie frontu
+        if: failure()
+        run: |
+          {
+            echo "## Angular frontend — co poszło nie tak"
+            echo ""
+            if [ "${{ steps.npm_install.outcome }}" = "failure" ]; then
+              echo "Padł krok: **npm install** (zależności / sieć / registry)."
+            elif [ "${{ steps.npm_build.outcome }}" = "failure" ]; then
+              echo "Padł krok: **npm run build** (TypeScript / Angular compile)."
+            else
+              echo "Padł krok: **npm run test** (Vitest / TestBed / asercje)."
+              echo ""
+              echo "- W logu widać adnotacje GitHub z **github-actions** reportera (plik i linia)."
+              echo "- Pobierz artefakt **vitest-junit-${{ github.run_id }}** (XML) — pełna lista testów i błędów."
+              echo "- TestBed Angular: unikaj wielu \`configureTestingModule\` w jednym workerze; w CI używamy \`pool: 'forks'\` w \`vitest.config.ts\`."
+              echo "- Błąd \`No provider for HttpClient\`: w teście dodaj \`provideHttpClient()\` / mock \`HttpClient\` w \`TestBed\`."
+            fi
+            echo ""
+            echo "Lokalnie: \`cd sample-app/angular-frontend\` → \`npm install\` → \`npm run build\` → \`CI=true npm run test:ci\`."
+          } >> "$GITHUB_STEP_SUMMARY"

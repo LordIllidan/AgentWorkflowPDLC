@@ -13,7 +13,10 @@ Workflow GitHub Actions uruchamia się przy PR-ach, które zmieniają kod w `sam
 - Trigger: `pull_request` z filtrem ścieżek (tylko zmiany w katalogach sample app albo w samym pliku workflow).
 - Job **changes** używa `dorny/paths-filter`, żeby uruchomić tylko te joby, które dotyczą faktycznie zmienionych aplikacji.
 - **dotnet-api:** `dotnet restore`, `dotnet build` (Release) na `ubuntu-latest`, SDK 8.0.x. W projekcie nie ma osobnego projektu testów — brak kroku `dotnet test`.
-- **angular-frontend:** `npm install`, `npm run build`, `npm run test` (Vitest). W `package.json` nie ma skryptu `lint` ani targetu `lint` w `angular.json` — osobny krok lintera nie jest uruchamiany, dopóki nie zostanie dodany w aplikacji.
+- **angular-frontend:** osobne kroki `npm install`, `npm run build`, `npm run test:ci` (Vitest). Przy `CI=true` włączane są reportery **default**, **github-actions** (adnotacje przy pliku/linii w UI Actions) oraz **JUnit** do pliku `reports/vitest-junit.xml`.
+- Po każdym runie testów artefakt **`vitest-junit-<run_id>`** jest wgrywany (`if: always()`), także przy niepowodzeniu — można pobrać XML i zobaczyć pełną listę testów bez przewijania logu.
+- Przy **failure** job dopisuje **Job summary** z podpowiedzią, który krok padł (install / build / test) i typowymi przyczynami (TestBed, `HttpClient` w testach).
+- W `vitest.config.ts` ustawiono `pool: 'forks'` (osobne pliki spec w osobnych procesach). W `src/test-setup.ts` jest globalny `afterEach` z `getTestBed().resetTestingModule()`, żeby kolejne `beforeEach` + `configureTestingModule` w tym samym pliku nie wywalały się na „already been instantiated”.
 
 ## Uwagi
 
