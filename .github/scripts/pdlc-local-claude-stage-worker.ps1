@@ -12,6 +12,8 @@ param(
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
+. (Join-Path $PSScriptRoot 'pdlc-claude-diagnostics.ps1')
+
 function Test-RequiredCommand {
     param([Parameter(Mandatory = $true)][string]$Name)
 
@@ -790,7 +792,7 @@ Expected output:
 "@
 
 $allowedTools = "Read,Glob,Grep,LS,WebSearch,WebFetch,Bash(git status:*),Bash(git diff:*)"
-$claudeArgs = @(
+$baseClaudeOpts = @(
     "--print",
     "--model", $model,
     "--permission-mode", "acceptEdits",
@@ -799,25 +801,33 @@ $claudeArgs = @(
     "--allowedTools", $allowedTools
 )
 
+$stageDebug1 = Join-Path $runDirectory "claude-stage-$($stage.Key)-run1-$RunId.log"
+$claudeArgs = @($baseClaudeOpts) + (Get-PdlcClaudeDebugCliArgs $stageDebug1)
+$claudeStartUtc1 = [datetime]::UtcNow
 $claudeOutput = $prompt | & claude @claudeArgs 2>&1
 $exitCode = $LASTEXITCODE
 $claudeOutputText = ($claudeOutput | ForEach-Object { $_.ToString() }) -join "`n"
+Save-PdlcClaudeSessionBundle -RunDirectory $runDirectory -WorkspacePath (Get-Location).Path -StartUtc $claudeStartUtc1 -RunId "$RunId-$($stage.Key)-run1" -Label "stage $($stage.Key) primary"
+
 $runUrl = "$env:GITHUB_SERVER_URL/$Repository/actions/runs/$RunId"
 
 if ($exitCode -ne 0) {
+    $limitHit = Test-PdlcClaudeRateLimitText $claudeOutputText
+    Write-PdlcClaudeFailureToActionsLog -StreamText $claudeOutputText -ExitCode $exitCode -RateLimitSuspected:$limitHit
     $failureExcerpt = Get-TextExcerpt -Text $claudeOutputText -MaxLength 3500
-    $failureBody = @"
-Local Claude stage worker failed.
-
-Stage: $($stage.Key)
-Run: $runUrl
-
-Claude output excerpt:
-~~~text
-$failureExcerpt
-~~~
-"@
+    $failureBody = @(
+        "Local Claude stage worker failed.",
+        "",
+        "Stage: $($stage.Key)",
+        "Run: $runUrl",
+        "",
+        "Claude output excerpt:",
+        "~~~text",
+        $failureExcerpt,
+        "~~~"
+    ) -join "`n"
     gh issue comment $issue.number --repo $Repository --body $failureBody
+    Publish-PdlcClaudeDiagnosticsGit -RunDirectory $runDirectory -BranchName $branchContext.BranchName -RunId $RunId -Kind "stage-$($stage.Key)-run1" -AlsoAdd @($stageDebug1)
     throw "Claude Code exited with code $exitCode."
 }
 
@@ -862,13 +872,21 @@ Do not summarize what should be in the artifact.
 Start with the exact required status line for this stage.
 "@
 
-    $retryOutput = $retryPrompt | & claude @claudeArgs 2>&1
+    $stageDebug2 = Join-Path $runDirectory "claude-stage-$($stage.Key)-run2-$RunId.log"
+    $claudeArgsRetry = @($baseClaudeOpts) + (Get-PdlcClaudeDebugCliArgs $stageDebug2)
+    $claudeStartUtc2 = [datetime]::UtcNow
+    $retryOutput = $retryPrompt | & claude @claudeArgsRetry 2>&1
     $retryExitCode = $LASTEXITCODE
     $claudeOutputText = ($retryOutput | ForEach-Object { $_.ToString() }) -join "`n"
+    Save-PdlcClaudeSessionBundle -RunDirectory $runDirectory -WorkspacePath (Get-Location).Path -StartUtc $claudeStartUtc2 -RunId "$RunId-$($stage.Key)-run2" -Label "stage $($stage.Key) retry"
+
     $claudeOutputText = Select-StageArtifactBody -Text $claudeOutputText -StageKey $stage.Key
 
     if ($retryExitCode -ne 0) {
+        $limitHit = Test-PdlcClaudeRateLimitText $claudeOutputText
+        Write-PdlcClaudeFailureToActionsLog -StreamText $claudeOutputText -ExitCode $retryExitCode -RateLimitSuspected:$limitHit
         Write-QualityGateDiagnostic -Issue $issue -Repository $Repository -Stage $stage -RunUrl $runUrl -QualityIssues $qualityIssues -OutputText $claudeOutputText -Prefix "Local Claude stage worker failed during artifact quality retry."
+        Publish-PdlcClaudeDiagnosticsGit -RunDirectory $runDirectory -BranchName $branchContext.BranchName -RunId $RunId -Kind "stage-$($stage.Key)-run2" -AlsoAdd @($stageDebug1, $stageDebug2)
         throw "Claude Code exited with code $retryExitCode during artifact quality retry."
     }
 }

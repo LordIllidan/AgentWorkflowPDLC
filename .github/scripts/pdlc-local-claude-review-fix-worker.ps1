@@ -12,6 +12,17 @@ param(
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
+. (Join-Path $PSScriptRoot 'pdlc-claude-diagnostics.ps1')
+
+function Write-ReviewFixStepSummary {
+    param([Parameter(Mandatory = $true)][string]$Markdown)
+    $path = $env:GITHUB_STEP_SUMMARY
+    if (-not $path) {
+        return
+    }
+    Add-Content -LiteralPath $path -Value $Markdown -Encoding utf8
+}
+
 function Test-RequiredCommand {
     param([Parameter(Mandatory = $true)][string]$Name)
 
@@ -269,7 +280,10 @@ $claudeArgs = @(
     "--max-budget-usd", $budget,
     "--allowedTools", $allowedTools
 )
+$debugPath = Join-Path $runDirectory "claude-review-fix-debug-$RunId.log"
+$claudeArgs = @($claudeArgs) + (Get-PdlcClaudeDebugCliArgs $debugPath)
 
+$claudeStartUtc = [datetime]::UtcNow
 $claudeOutput = $prompt | & claude @claudeArgs 2>&1
 $exitCode = $LASTEXITCODE
 $claudeOutputText = ($claudeOutput | ForEach-Object { $_.ToString() }) -join "`n"
@@ -292,18 +306,12 @@ $claudeOutputText
 "@
 Write-Utf8File -Path $outputPath -Content $output
 
-function Write-ReviewFixStepSummary {
-    param([Parameter(Mandatory = $true)][string]$Markdown)
-    $path = $env:GITHUB_STEP_SUMMARY
-    if (-not $path) {
-        return
-    }
-    Add-Content -LiteralPath $path -Value $Markdown -Encoding utf8
-}
+Save-PdlcClaudeSessionBundle -RunDirectory $runDirectory -WorkspacePath (Get-Location).Path -StartUtc $claudeStartUtc -RunId $RunId -Label 'review-fix'
 
 if ($exitCode -ne 0) {
     $runUrl = "$env:GITHUB_SERVER_URL/$Repository/actions/runs/$RunId"
-    $limitHit = $claudeOutputText -match '(?i)(you''ve hit your limit|hit your limit|rate limit|billing|usage limit)'
+    $limitHit = Test-PdlcClaudeRateLimitText $claudeOutputText
+    Write-PdlcClaudeFailureToActionsLog -StreamText $claudeOutputText -ExitCode $exitCode -RateLimitSuspected:$limitHit
     if ($limitHit) {
         $body = @(
             "**Review-fix: Claude Code nie wykonał zmian (limit konta / planu Anthropic)**",
@@ -352,6 +360,7 @@ if ($exitCode -ne 0) {
         ) -join "`n")
     }
     gh pr comment $prNumber --repo $Repository --body $body
+    Publish-PdlcClaudeDiagnosticsGit -RunDirectory $runDirectory -BranchName $branchName -RunId $RunId -Kind 'review-fix' -AlsoAdd @($promptPath, $outputPath, $debugPath)
     throw "Claude Code exited with code $exitCode."
 }
 

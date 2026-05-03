@@ -15,6 +15,8 @@ param(
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
+. (Join-Path $PSScriptRoot 'pdlc-claude-diagnostics.ps1')
+
 function Test-RequiredCommand {
     param([Parameter(Mandatory = $true)][string]$Name)
 
@@ -361,7 +363,8 @@ Expected output:
 
 Write-Utf8File -Path $promptPath -Content $prompt
 
-$allowedTools = "Read,Edit,Write,Glob,Grep,LS,Bash(git status:*),Bash(git diff:*),Bash(dotnet build:*),Bash(dotnet test:*),Bash(mvn test:*),Bash(npm install:*),Bash(npm run build:*)"
+$allowedTools = "Read,Edit,Write,Glob,Grep,LS,Bash(git status:*),Bash(git diff:*),Bash(dotnet build:*),Bash(dotnet test:*),Bash(mvn test:*),Bash(npm ci:*),Bash(npm install:*),Bash(npm run build:*),Bash(npm run test:*)"
+$debugPath = Join-Path $runDirectory "claude-code-debug-$RunId.log"
 $claudeArgs = @(
     "--print",
     "--model", $model,
@@ -369,11 +372,14 @@ $claudeArgs = @(
     "--output-format", "text",
     "--max-budget-usd", $budget,
     "--allowedTools", $allowedTools
-)
+) + (Get-PdlcClaudeDebugCliArgs $debugPath)
 
+$claudeStartUtc = [datetime]::UtcNow
 $claudeOutput = $prompt | & claude @claudeArgs 2>&1
 $exitCode = $LASTEXITCODE
 $claudeOutputText = ($claudeOutput | ForEach-Object { $_.ToString() }) -join "`n"
+
+Save-PdlcClaudeSessionBundle -RunDirectory $runDirectory -WorkspacePath (Get-Location).Path -StartUtc $claudeStartUtc -RunId $RunId -Label 'coding'
 
 $output = @"
 # Claude Code Worker Output
@@ -392,18 +398,21 @@ $claudeOutputText
 Write-Utf8File -Path $outputPath -Content $output
 
 if ($exitCode -ne 0) {
+    $limitHit = Test-PdlcClaudeRateLimitText $claudeOutputText
+    Write-PdlcClaudeFailureToActionsLog -StreamText $claudeOutputText -ExitCode $exitCode -RateLimitSuspected:$limitHit
     $failureExcerpt = if ($claudeOutputText.Length -gt 3500) { "$($claudeOutputText.Substring(0, 3500))`n`n... truncated ..." } else { $claudeOutputText }
-    $failureBody = @"
-Claude Code worker failed before PR update.
-
-Run: $env:GITHUB_SERVER_URL/$Repository/actions/runs/$RunId
-
-Claude output excerpt:
-~~~text
-$failureExcerpt
-~~~
-"@
+    $failureBody = @(
+        "Claude Code worker failed before PR update.",
+        "",
+        "Run: $env:GITHUB_SERVER_URL/$Repository/actions/runs/$RunId",
+        "",
+        "Claude output excerpt:",
+        "~~~text",
+        $failureExcerpt,
+        "~~~"
+    ) -join "`n"
     gh issue comment $IssueNumber --repo $Repository --body $failureBody
+    Publish-PdlcClaudeDiagnosticsGit -RunDirectory $runDirectory -BranchName $branchContext.BranchName -RunId $RunId -Kind 'coding' -AlsoAdd @($promptPath, $outputPath, $debugPath)
     throw "Claude Code exited with code $exitCode."
 }
 
