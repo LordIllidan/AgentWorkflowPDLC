@@ -392,7 +392,18 @@ $claudeOutputText
 Write-Utf8File -Path $outputPath -Content $output
 
 if ($exitCode -ne 0) {
-    gh issue comment $IssueNumber --repo $Repository --body "Claude Code worker failed before PR update. Run: $env:GITHUB_SERVER_URL/$Repository/actions/runs/$RunId"
+    $failureExcerpt = if ($claudeOutputText.Length -gt 3500) { "$($claudeOutputText.Substring(0, 3500))`n`n... truncated ..." } else { $claudeOutputText }
+    $failureBody = @"
+Claude Code worker failed before PR update.
+
+Run: $env:GITHUB_SERVER_URL/$Repository/actions/runs/$RunId
+
+Claude output excerpt:
+~~~text
+$failureExcerpt
+~~~
+"@
+    gh issue comment $IssueNumber --repo $Repository --body $failureBody
     throw "Claude Code exited with code $exitCode."
 }
 
