@@ -2,7 +2,7 @@
 
 Issue: #20 PDLC: dodać 3 algorytmy analizy ryzyk w mieszkalnictwie
 Branch: agent/pdlc-issue-20-pdlc-doda-3-algorytmy-analizy-ryzyk-w-mieszkalni
-Run: https://github.com/LordIllidan/AgentWorkflowPDLC/actions/runs/25272435172
+Run: https://github.com/LordIllidan/AgentWorkflowPDLC/actions/runs/25287425164
 Agent: planner-agent
 Model: sonnet
 Autonomy mode: full-auto
@@ -26,9 +26,14 @@ Implementacja obejmuje dwa stosy technologiczne — backend .NET 8 i frontend An
 
 **Łączna liczba plików:** 16 nowych + 3 modyfikacje istniejących.
 
-**Szacowany nakład (coding worker):** 2–3 godziny przy pełnym kontekście z artefaktów.
+**Kluczowe ustalenia z `10-research.md`:**
+- Backend używa `Results.Json()`, nie `Results.Ok()` — nowy endpoint zachowuje spójność
+- `@angular/forms` nieobecny — formularze wyłącznie przez sygnały + event binding
+- `provideHttpClient()` nieobecny w `main.ts` — wymaga dodania
+- Bez `JsonStringEnumConverter` .NET 8 serializuje C# enum jako liczby, nie stringi
+- Frontend wywołuje backend bezpośrednio przez URL `http://localhost:8080/...` — brak proxy
 
-**Checkpointy ludzkie przed merge:** code review PR (CP-3 wg `05-autonomy-risk.md`).
+**Checkpointy ludzkie przed merge:** code review PR (CP-3).
 
 ---
 
@@ -37,27 +42,27 @@ Implementacja obejmuje dwa stosy technologiczne — backend .NET 8 i frontend An
 Kolejność wyznaczona przez zależności: modele → algorytmy → endpoint → testy backendu → typy frontendu → serwis → testy serwisu → komponent → testy komponentu → integracja → dokumentacja.
 
 ```
-Krok  Platforma   Plik                                                        Zależność
-────  ─────────── ─────────────────────────────────────────────────────────── ───────────────────────
-  1   .NET        Housing/HousingRiskModels.cs                                (brak)
-  2   .NET        Housing/PropertyScoreAlgorithm.cs                           Krok 1
-  3   .NET        Housing/LocationWeightAlgorithm.cs                          Krok 1
-  4   .NET        Housing/SpecialCaseRuleAlgorithm.cs                         Krok 1
-  5   .NET        Housing/HousingRiskRecommender.cs                           Krok 1
-  6   .NET        Program.cs (MODIFY)                                         Kroki 1–5
-  7   xUnit       dotnet-api-tests/dotnet-api-tests.csproj                    Kroki 1–6
-  8   xUnit       Housing/PropertyScoreAlgorithmTests.cs                      Krok 7
-  9   xUnit       Housing/LocationWeightAlgorithmTests.cs                     Krok 7
- 10   xUnit       Housing/SpecialCaseRuleAlgorithmTests.cs                    Krok 7
- 11   xUnit       Housing/HousingRiskRecommenderTests.cs                      Krok 7
- 12   Angular     housing/housing-risk.types.ts                               (brak)
- 13   Angular     housing/housing-risk.service.ts                             Krok 12
- 14   Vitest      housing/housing-risk.service.test.ts                        Krok 13
- 15   Angular     housing/housing-risk.component.ts                           Kroki 12–13
- 16   Vitest      housing/housing-risk.component.test.ts                      Krok 15
- 17   Angular     src/main.ts (MODIFY)                                        Krok 13
- 18   Angular     src/app/app.component.ts (MODIFY)                           Krok 15
- 19   Docs        sample-app/docs/housing-risk-algorithms.md                  Kroki 1–18
+Krok  Platforma   Plik                                                          Zależność
+────  ─────────── ───────────────────────────────────────────────────────────── ─────────────────────
+  1   .NET        Housing/HousingRiskModels.cs                                  (brak)
+  2   .NET        Housing/PropertyScoreAlgorithm.cs                             Krok 1
+  3   .NET        Housing/LocationWeightAlgorithm.cs                            Krok 1
+  4   .NET        Housing/SpecialCaseRuleAlgorithm.cs                           Krok 1
+  5   .NET        Housing/HousingRiskRecommender.cs                             Krok 1
+  6   .NET        Program.cs (MODIFY)                                           Kroki 1–5
+  7   xUnit       dotnet-api-tests/dotnet-api-tests.csproj                      Kroki 1–6
+  8   xUnit       Housing/PropertyScoreAlgorithmTests.cs                        Krok 7
+  9   xUnit       Housing/LocationWeightAlgorithmTests.cs                       Krok 7
+ 10   xUnit       Housing/SpecialCaseRuleAlgorithmTests.cs                      Krok 7
+ 11   xUnit       Housing/HousingRiskRecommenderTests.cs                        Krok 7
+ 12   Angular     housing/housing-risk.types.ts                                 (brak)
+ 13   Angular     housing/housing-risk.service.ts                               Krok 12
+ 14   Vitest      housing/housing-risk.service.test.ts                          Krok 13
+ 15   Angular     housing/housing-risk.component.ts                             Kroki 12–13
+ 16   Vitest      housing/housing-risk.component.test.ts                        Krok 15
+ 17   Angular     src/main.ts (MODIFY)                                          Krok 13
+ 18   Angular     src/app/app.component.ts (MODIFY)                             Krok 15
+ 19   Docs        sample-app/docs/housing-risk-algorithms.md                    Kroki 1–18
 ```
 
 **Weryfikacja po grupie kroków:**
@@ -65,7 +70,7 @@ Krok  Platforma   Plik                                                        Za
 - Po krokach 7–11: `dotnet test sample-app/dotnet-api-tests/` — wszystkie testy zielone.
 - Po krokach 12–16: `npm test` w `sample-app/angular-frontend/` — testy Vitest przechodzą.
 - Po krokach 17–18: `npm start` — aplikacja uruchamia się bez błędów w konsoli przeglądarki.
-- Po kroku 19: kontrola manualna sekcji dokumentu.
+- Po kroku 19: kontrola manualna kompletności sekcji dokumentu.
 
 ---
 
@@ -153,27 +158,27 @@ public static class PropertyScoreAlgorithm
     {
         int agePenalty = req.BuildingAge switch
         {
-            < 10                => 0,
-            >= 10 and <= 30     => 10,
-            >= 31 and <= 50     => 20,
-            _                   => 35
+            < 10                    => 0,
+            >= 10 and <= 30         => 10,
+            >= 31 and <= 50         => 20,
+            _                       => 35
         };
 
         int floorFactor = req.Floor switch
         {
-            <= 1                => 10,
-            >= 2 and <= 4       => 5,
-            >= 5 and <= 9       => 0,
-            _                   => -5
+            <= 1                    => 10,
+            >= 2 and <= 4           => 5,
+            >= 5 and <= 9           => 0,
+            _                       => -5
         };
 
         int securityDiscount = req.SecurityLevel switch
         {
-            SecurityLevel.None   => 0,
-            SecurityLevel.Basic  => 5,
-            SecurityLevel.Medium => 10,
-            SecurityLevel.High   => 20,
-            _                    => 0
+            SecurityLevel.None      => 0,
+            SecurityLevel.Basic     => 5,
+            SecurityLevel.Medium    => 10,
+            SecurityLevel.High      => 20,
+            _                       => 0
         };
 
         int claimsPenalty = req.ClaimsLast5Years switch
@@ -218,11 +223,11 @@ public static class LocationWeightAlgorithm
     {
         double floodScore = req.Location.FloodZone switch
         {
-            FloodZone.A    => 1.0,
-            FloodZone.B    => 0.6,
-            FloodZone.C    => 0.3,
-            FloodZone.None => 0.0,
-            _              => 0.0
+            FloodZone.A     => 1.0,
+            FloodZone.B     => 0.6,
+            FloodZone.C     => 0.3,
+            FloodZone.None  => 0.0,
+            _               => 0.0
         };
         double fireScore = req.Location.FireRiskZone switch
         {
@@ -364,13 +369,16 @@ public static class HousingRiskRecommender
 
 #### Krok 6 — `Program.cs` (MODIFY)
 
-Dodać dwa bloki do istniejącego `Program.cs`. Nie modyfikować istniejącego endpointu `/risk-score`.
+Dodać trzy bloki do istniejącego `Program.cs`. Nie modyfikować istniejącego endpointu `/risk-score`.
+
+**Uwaga:** Istniejący kod używa `Results.Json()` — nowy endpoint zachowuje tę samą konwencję dla spójności.
 
 ```csharp
-// 1. Dodać using na początku pliku:
+// 1. Dodać using na początku pliku (za istniejącymi):
 using SampleRiskApi.Housing;
 
-// 2. Dodać konfigurację JSON (jeśli nie istnieje) — obsługa enum jako string:
+// 2. Dodać konfigurację JSON — deserializacja stringów JSON do C# enum:
+//    (przed app.Build())
 builder.Services.ConfigureHttpJsonOptions(opts =>
     opts.SerializerOptions.Converters.Add(
         new System.Text.Json.Serialization.JsonStringEnumConverter(
@@ -394,7 +402,8 @@ app.MapPost("/api/risk/housing/evaluate", (HousingEvaluationRequest req) =>
         errors["insuredSumPLN"] = "insuredSumPLN must be >= 0";
 
     if (errors.Count > 0)
-        return Results.BadRequest(new { error = "Validation failed", fields = errors });
+        return Results.Json(new { error = "Validation failed", fields = errors },
+            statusCode: 400);
 
     var pointBased  = PropertyScoreAlgorithm.Evaluate(req);
     var weightBased = LocationWeightAlgorithm.Evaluate(req);
@@ -404,7 +413,7 @@ app.MapPost("/api/risk/housing/evaluate", (HousingEvaluationRequest req) =>
         weightBased.Classification,
         ruleBased.Classification);
 
-    return Results.Ok(new HousingEvaluationResponse(
+    return Results.Json(new HousingEvaluationResponse(
         new AlgorithmsResult(pointBased, weightBased, ruleBased),
         recommended));
 });
@@ -441,51 +450,75 @@ app.MapPost("/api/risk/housing/evaluate", (HousingEvaluationRequest req) =>
 
 Pokrywa przypadki T1-01 do T1-10 z `20-analysis.md`. Testy jednostkowe bez uruchamiania serwera HTTP.
 
-Kluczowe przypadki testowe:
+| ID | age | floor | total | security | claims | Oczekiwany score | Klasa |
+|----|-----|-------|-------|----------|--------|-----------------|-------|
+| T1-01 | 35 | 3 | 10 | medium | 1 | 20+5−10+20 = **35** | `medium` |
+| T1-02 | 55 | 0 | 5 | none | 3 | 35+10−0+60 = **105** | `critical` |
+| T1-03 | 5 | 12 | 20 | high | 0 | 0+(−5)−20+0 = **−25** | `low` |
+| T1-04 | 20 | 5 | 10 | none | 0 | 10+0−0+0 = **10** | `low` (score=10, <30) |
+| T1-05 | 35 | 0 | 5 | none | 0 | 20+10−0+0 = **30** | `medium` (próg) |
+| T1-06 | 35 | 3 | 10 | none | 1 | 20+5−0+20 = **45** | `medium` |
+| T1-07 | 55 | 2 | 5 | none | 1 | 35+5−0+20 = **60** | `high` (próg) |
+| T1-08 | 55 | 0 | 5 | basic | 2 | 35+10−5+40 = **80** | `high` |
+| T1-09 | 55 | 0 | 5 | none | 2 | 35+10−0+40 = **85** | `high` |
+| T1-10 | 0 | 0 | 1 | basic | 0 | 0+10−5+0 = **5** | `low` |
 
-| ID | age | floor | total | sec | claims | Oczekiwany score | Klasa |
-|----|-----|-------|-------|-----|--------|-----------------|-------|
-| T1-01 | 35 | 3 | 10 | medium | 1 | 35 | medium |
-| T1-02 | 55 | 0 | 5 | none | 3 | 105 | critical |
-| T1-03 | 5 | 12 | 20 | high | 0 | −25 | low |
-| T1-05 | 35 | 0 | 5 | none | 0 | 30 | medium (próg) |
-| T1-07 | 55 | 2 | 5 | none | 1 | 60 | high (próg) |
-| T1-10 | 0 | 0 | 1 | basic | 0 | 5 | low |
+Próg `score=90 → critical`: `age=55 (35) + floor=0 (10) + sec=none (0) + claims=3 (60) = 105`.
+Próg `score=89 → high`: kombinacja do sumy 89 — np. `age=55 (35) + floor=0 (10) + claims=3 (60) - sec=high (20) = 85` — użyć age=55, floor=0, sec=basic, claims=3: 35+10-5+60=100. Alternatywnie zadeklarować test z oczekiwanym score=89 przez wybór kombinacji. Coding worker tworzy odpowiednią kombinację wartości wejściowych, której suma wynosi dokładnie 89.
 
 ---
 
 #### Krok 9 — `Housing/LocationWeightAlgorithmTests.cs` (CREATE)
 
-Pokrywa T2-01 do T2-07. Weryfikuje wyniki numeryczne i klasyfikacje dla wszystkich kombinacji stref.
+Pokrywa T2-01 do T2-07 z `20-analysis.md`.
 
-Kluczowe przypadki:
+| ID | floodZone | fireRiskZone | theftRiskZone | buildingDensity | Score | Klasa |
+|----|-----------|-------------|--------------|----------------|-------|-------|
+| T2-01 | B | low | high | urban | 0.18+0.02+0.35+0.12 = **0.67** | `high` |
+| T2-02 | none | low | low | rural | 0+0.02+0.035+0.015 = **0.07** | `low` |
+| T2-03 | A | high | high | urban | 0.30+0.20+0.35+0.12 = **0.97** | `critical` |
+| T2-04 | C | medium | medium | suburban | 0.09+0.10+0.175+0.06 = **0.43** | `medium` |
+| T2-05 | B | low | low | rural | 0.18+0.02+0.035+0.015 = **0.25** | `medium` (próg) |
+| T2-06 | B | low | high | rural | 0.18+0.02+0.35+0.015 = **0.57** | `high` (≥ 0.50) |
+| T2-07 | A | high | high | rural | 0.30+0.20+0.35+0.015 = **0.87** | `critical` (≥ 0.75) |
 
-| ID | flood | fire | theft | density | Score | Klasa |
-|----|-------|------|-------|---------|-------|-------|
-| T2-01 | B | low | high | urban | 0.67 | high |
-| T2-02 | none | low | low | rural | 0.07 | low |
-| T2-03 | A | high | high | urban | 0.97 | critical |
-| T2-05 | B | low | low | rural | 0.25 | medium (próg) |
+Testy weryfikują wynik numeryczny z tolerancją ±0.01 (zaokrąglenie zmiennoprzecinkowe) ORAZ klasę ryzyka.
 
 ---
 
 #### Krok 10 — `Housing/SpecialCaseRuleAlgorithmTests.cs` (CREATE)
 
-Pokrywa T3-01 do T3-08. Kluczowy przypadek graniczny: `insuredSumPLN = 500 000` → `low` (warunek `> 500 000`, nie `>=`); `insuredSumPLN = 500 001` → `medium`.
+Pokrywa T3-01 do T3-08 z `20-analysis.md`.
+
+| ID | isVacant | isWoodenStructure | missingInspections | insuredSumPLN | triggeredRules | Klasa |
+|----|----------|-------------------|--------------------|--------------|---------------|-------|
+| T3-01 | false | false | false | 300 000 | [] | `low` |
+| T3-02 | false | false | true | 300 000 | [MISSING_INSPECTIONS] | `medium` |
+| T3-03 | false | false | false | 500 001 | [HIGH_INSURED_SUM] | `medium` |
+| T3-04 | false | false | false | **500 000** | [] | `low` (ścisłe `>`) |
+| T3-05 | true | false | false | 0 | [VACANT_PROPERTY] | `high` |
+| T3-06 | false | true | false | 0 | [WOODEN_STRUCTURE] | `high` |
+| T3-07 | true | true | true | 600 000 | [VACANT_PROPERTY, WOODEN_STRUCTURE, MISSING_INSPECTIONS, HIGH_INSURED_SUM] | `high` |
+| T3-08 | false | false | true | 500 001 | [MISSING_INSPECTIONS, HIGH_INSURED_SUM] | `medium` |
+
+**Przypadek graniczny T3-04 jest krytyczny** — test musi explicite weryfikować, że `insuredSumPLN = 500 000` (nie 500 001) zwraca `low` z pustą listą reguł.
 
 ---
 
 #### Krok 11 — `Housing/HousingRiskRecommenderTests.cs` (CREATE)
 
-Pokrywa TR-01 do TR-05 oraz trzy testy rationale (wszystkie zgodne, critical, rozbieżność).
+Pokrywa TR-01 do TR-05 plus trzy przypadki testowe rationale.
 
-| ID | ALG-1 | ALG-2 | ALG-3 | Rekomendacja |
-|----|-------|-------|-------|-------------|
-| TR-01 | medium | high | medium | high |
-| TR-02 | low | low | low | low |
-| TR-03 | low | medium | high | high |
-| TR-04 | critical | low | low | critical |
-| TR-05 | medium | medium | medium | medium |
+| ID | ALG-1 | ALG-2 | ALG-3 | Rekomendacja | Typ rationale |
+|----|-------|-------|-------|-------------|---------------|
+| TR-01 | medium | high | medium | `high` | Dwa lub więcej wskazuje `high` |
+| TR-02 | low | low | low | `low` | Wszystkie zgodne: `low` |
+| TR-03 | low | medium | high | `high` | Rozbieżność — przyjęto najwyższy |
+| TR-04 | critical | low | low | `critical` | Algorytm punktowy wskazuje krytyczne |
+| TR-05 | medium | medium | medium | `medium` | Wszystkie zgodne: `medium` |
+| TR-06 | low | critical | low | `critical` | Algorytm wagowy wskazuje krytyczne |
+| TR-07 | critical | critical | low | `critical` | Algorytm punktowy wskazuje krytyczne |
+| TR-08 | low | medium | low | `medium` | Rozbieżność — przyjęto najwyższy |
 
 ---
 
@@ -538,18 +571,26 @@ export interface WeightBasedResult {
   score: number; classification: HousingRiskClass; breakdown: WeightBasedBreakdown;
 }
 export interface RuleBasedResult {
-  classification: HousingRiskClass; triggeredRules: string[]; blockedRules: string[];
+  classification: HousingRiskClass;
+  triggeredRules: string[];
+  blockedRules: string[];
 }
 export interface AlgorithmsResult {
-  pointBased: PointBasedResult; weightBased: WeightBasedResult; ruleBased: RuleBasedResult;
+  pointBased: PointBasedResult;
+  weightBased: WeightBasedResult;
+  ruleBased: RuleBasedResult;
 }
-export interface RecommendedResult { classification: HousingRiskClass; rationale: string; }
+export interface RecommendedResult {
+  classification: HousingRiskClass;
+  rationale: string;
+}
 export interface HousingEvaluationResponse {
-  algorithms: AlgorithmsResult; recommended: RecommendedResult;
+  algorithms: AlgorithmsResult;
+  recommended: RecommendedResult;
 }
 ```
 
-Typ `HousingRiskClass` jest oddzielny od istniejącego `RiskClass` — nie zawiera klasy `regulated` (domena PDLC, nie mieszkalnictwo). Nie modyfikować `risk-summary.ts`.
+`HousingRiskClass` nie zawiera klasy `regulated` — ta należy do domeny PDLC. Nie modyfikować istniejącego `risk-summary.ts`.
 
 ---
 
@@ -572,40 +613,129 @@ export class HousingRiskService {
 }
 ```
 
+URL bezpośredni — brak proxy Angular w `angular.json` (potwierdzone w `10-research.md`).
+
 ---
 
 #### Krok 14 — `src/app/housing/housing-risk.service.test.ts` (CREATE)
 
-Dwa testy: weryfikacja URL endpointu + metody POST, oraz niezmodyfikowane przekazanie ciała requestu. Używa `provideHttpClientTesting()` i `HttpTestingController`.
+Dwa testy:
+1. `evaluate()` wysyła `POST` na właściwy URL z podanym ciałem requestu.
+2. Ciało requestu jest przekazywane bez modyfikacji do `HttpClient.post()`.
+
+Używa `provideHttpClientTesting()` i `HttpTestingController`.
+
+```typescript
+import { TestBed }             from '@angular/core/testing';
+import { provideHttpClient }   from '@angular/common/http';
+import { provideHttpClientTesting, HttpTestingController } from '@angular/common/http/testing';
+import { HousingRiskService }  from './housing-risk.service';
+import { HousingEvaluationRequest } from './housing-risk.types';
+
+describe('HousingRiskService', () => {
+  let service: HousingRiskService;
+  let httpMock: HttpTestingController;
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      providers: [provideHttpClient(), provideHttpClientTesting()]
+    });
+    service  = TestBed.inject(HousingRiskService);
+    httpMock = TestBed.inject(HttpTestingController);
+  });
+
+  afterEach(() => httpMock.verify());
+
+  it('sends POST to correct URL', () => {
+    const req = { /* minimal valid request */ } as HousingEvaluationRequest;
+    service.evaluate(req).subscribe();
+    const testReq = httpMock.expectOne('http://localhost:8080/api/risk/housing/evaluate');
+    expect(testReq.request.method).toBe('POST');
+    testReq.flush({});
+  });
+
+  it('passes request body unchanged', () => {
+    const req = { buildingAge: 35 } as HousingEvaluationRequest;
+    service.evaluate(req).subscribe();
+    const testReq = httpMock.expectOne(r => r.url.includes('/evaluate'));
+    expect(testReq.request.body).toEqual(req);
+    testReq.flush({});
+  });
+});
+```
 
 ---
 
 #### Krok 15 — `src/app/housing/housing-risk.component.ts` (CREATE)
 
-Standalone component z Angular Signals. Sygnały wejściowe formularza (nie `FormGroup`), sygnały wyjściowe (`result`, `isLoading`, `errorMessage`). Template inline z:
-- Formularzem (13 pól wejściowych)
-- Trzema kartami algorytmów (ALG-1, ALG-2, ALG-3)
-- Wyróżnioną kartą rekomendacji
+Standalone component z Angular Signals. Sygnały wejściowe formularza (nie `FormGroup`), sygnały wyjściowe (`result`, `isLoading`, `errorMessage`).
 
-Badge klasy ryzyka — kolory OKLCH zgodne z design systemem:
+**Sygnały stanu:**
+```typescript
+// wejście
+readonly buildingAge        = signal(0);
+readonly floor              = signal(0);
+readonly totalFloors        = signal(1);
+readonly securityLevel      = signal<SecurityLevel>('none');
+readonly claimsLast5Years   = signal(0);
+readonly floodZone          = signal<FloodZone>('none');
+readonly fireRiskZone       = signal<RiskZoneLevel>('low');
+readonly theftRiskZone      = signal<RiskZoneLevel>('low');
+readonly buildingDensity    = signal<BuildingDensity>('rural');
+readonly isVacant           = signal(false);
+readonly isWoodenStructure  = signal(false);
+readonly missingInspections = signal(false);
+readonly insuredSumPLN      = signal(0);
 
-| Klasa | Hue | Tło | Border | Tekst |
-|-------|-----|-----|--------|-------|
-| low | 145 | oklch(95% 0.16 145) | oklch(80% 0.16 145) | oklch(60% 0.16 145) |
-| medium | 75 | oklch(95% 0.16 75) | oklch(80% 0.16 75) | oklch(60% 0.16 75) |
-| high | 38 | oklch(95% 0.16 38) | oklch(80% 0.16 38) | oklch(60% 0.16 38) |
-| critical | 18 | oklch(95% 0.16 18) | oklch(80% 0.16 18) | oklch(60% 0.16 18) |
+// wyjście
+readonly result        = signal<HousingEvaluationResponse | null>(null);
+readonly isLoading     = signal(false);
+readonly errorMessage  = signal<string | null>(null);
+```
 
-Obsługa błędów HTTP:
-- `400` → `"Błąd walidacji: {fields}"`
-- `status 0` → `"Nie można połączyć się z API."`
-- `5xx` → `"Błąd serwera. Spróbuj ponownie."`
+**Obsługa błędów HTTP:**
+
+| Status | Komunikat |
+|--------|-----------|
+| 400 | `"Błąd walidacji: {fields}"` |
+| 0 (brak połączenia) | `"Nie można połączyć się z API."` |
+| 5xx | `"Błąd serwera. Spróbuj ponownie."` |
+
+**Układ widoku porównania:**
+
+```
+┌─ ALG-1 Punktowy ──┐  ┌─ ALG-2 Wagowy ───┐  ┌─ ALG-3 Regułowy ─┐
+│  score: 35         │  │  score: 0.67      │  │  reguły: 1        │
+│  [ MEDIUM ]        │  │  [  HIGH  ]       │  │  [ MEDIUM ]       │
+└────────────────────┘  └──────────────────┘  └───────────────────┘
+┌─ ★ REKOMENDACJA ──────────────────────────────────────────────────┐
+│  [  HIGH  ]  "Rozbieżność algorytmów. Przyjęto: high."            │
+└────────────────────────────────────────────────────────────────────┘
+```
+
+**Badge klasy ryzyka — OKLCH (design system):**
+
+| Klasa | Hue | Tło | Border | Tekst/dot |
+|-------|-----|-----|--------|-----------|
+| `low` | 145 | `oklch(95% 0.16 145)` | `oklch(80% 0.16 145)` | `oklch(60% 0.16 145)` |
+| `medium` | 75 | `oklch(95% 0.16 75)` | `oklch(80% 0.16 75)` | `oklch(60% 0.16 75)` |
+| `high` | 38 | `oklch(95% 0.16 38)` | `oklch(80% 0.16 38)` | `oklch(60% 0.16 38)` |
+| `critical` | 18 | `oklch(95% 0.16 18)` | `oklch(80% 0.16 18)` | `oklch(60% 0.16 18)` |
+
+Zawsze para tło + border — nigdy sam kolor bez obramowania (reguła `design.md`).
 
 ---
 
 #### Krok 16 — `src/app/housing/housing-risk.component.test.ts` (CREATE)
 
-Cztery testy: renderowanie bez błędów, wyświetlenie kart po poprawnej odpowiedzi API, komunikat błędu przy 400, komunikat przy błędzie sieci (status 0).
+Cztery testy przy użyciu Vitest + Angular TestBed:
+
+| ID | Scenariusz | Weryfikacja |
+|----|------------|-------------|
+| C-01 | Komponent renderuje się bez błędów | Brak wyjątku w `TestBed.createComponent` |
+| C-02 | Po odpowiedzi 200 wyświetla cztery karty | Trzy karty algorytmów + karta rekomendacji widoczne w DOM |
+| C-03 | Po odpowiedzi 400 wyświetla komunikat błędu | `errorMessage` zawiera tekst `"Błąd walidacji"` |
+| C-04 | Po błędzie sieci (status 0) wyświetla komunikat | `errorMessage` zawiera `"Nie można połączyć się z API."` |
 
 ---
 
@@ -613,22 +743,26 @@ Cztery testy: renderowanie bez błędów, wyświetlenie kart po poprawnej odpowi
 
 ```typescript
 // Przed zmianą:
-bootstrapApplication(AppComponent, { providers: [] });
+bootstrapApplication(AppComponent);
 
 // Po zmianie:
 import { provideHttpClient } from '@angular/common/http';
-bootstrapApplication(AppComponent, { providers: [provideHttpClient()] });
+bootstrapApplication(AppComponent, {
+  providers: [provideHttpClient()]
+});
 ```
+
+Jeśli `provideHttpClient()` już istnieje — pominąć krok, nie duplikować.
 
 ---
 
 #### Krok 18 — `src/app/app.component.ts` (MODIFY)
 
 ```typescript
-// Dodać do imports komponentu:
+// Dodać do imports dekoratora:
 import { HousingRiskComponent } from './housing/housing-risk.component';
 
-// W tablicy imports dekoratora:
+// W tablicy imports:
 imports: [...istniejące, HousingRiskComponent],
 
 // W template — dodać po istniejącej sekcji:
@@ -637,16 +771,21 @@ imports: [...istniejące, HousingRiskComponent],
 
 ---
 
+### Dokumentacja
+
 #### Krok 19 — `sample-app/docs/housing-risk-algorithms.md` (CREATE)
 
-Dokument musi zawierać:
-1. Przegląd — cel trzech algorytmów i porównanie perspektyw
-2. ALG-1: Punktowy — formuła, tablice mapowań, przykład (age=35, floor=3, sec=medium, claims=1 → score=35 → medium)
-3. ALG-2: Wagowy — formuła z wagami, tablice stref, uzasadnienie wag, przykład (B, low, high, urban → 0.67 → high)
-4. ALG-3: Regułowy — definicje reguł, pseudokod, przykład (missingInspections=true, sum=450 000 → medium)
-5. Logika rekomendacji — zasada max(), przypadki rationale, przykład rozbieżności
-6. Kompletny request/response JSON
-7. Instrukcja uruchomienia (`dotnet run` + `npm start`)
+Dokument musi zawierać wszystkie z poniższych sekcji:
+
+| # | Sekcja | Zawartość minimalna |
+|---|--------|---------------------|
+| 1 | Przegląd | Cel trzech algorytmów, porównanie perspektyw, zasada `max()` dla rekomendacji |
+| 2 | ALG-1: Punktowy | Formuła, tablice mapowań składowych, przykład: age=35, floor=3, sec=medium, claims=1 → score=35 → `medium` |
+| 3 | ALG-2: Wagowy | Formuła z wagami, tablice stref, uzasadnienie wag (natcat, KGP), przykład: B, low, high, urban → 0.67 → `high` |
+| 4 | ALG-3: Regułowy | Definicje reguł binarnych, pseudokod, przykład: missingInspections=true, sum=450 000 → `medium` |
+| 5 | Logika rekomendacji | Zasada `max()`, cztery przypadki rationale, przykład rozbieżności |
+| 6 | API | Kompletny przykład request/response JSON |
+| 7 | Uruchomienie | `dotnet run` (backend) + `npm start` (frontend) — porty i URL |
 
 ---
 
@@ -654,34 +793,33 @@ Dokument musi zawierać:
 
 ### Stack .NET — `dotnet-api-tests/`
 
-| Plik testowy | Przypadki | Narzędzie |
-|---|---|---|
-| `PropertyScoreAlgorithmTests.cs` | 9 (T1-01 do T1-10) | xUnit |
-| `LocationWeightAlgorithmTests.cs` | 7 (T2-01 do T2-07) | xUnit |
-| `SpecialCaseRuleAlgorithmTests.cs` | 8 (T3-01 do T3-08) | xUnit |
-| `HousingRiskRecommenderTests.cs` | 8 (TR-01–05 + 3 rationale) | xUnit |
-| **Łącznie** | **32** | `dotnet test sample-app/dotnet-api-tests/` |
+| Plik testowy | Przypadki | Narzędzie | Pokrycie |
+|---|---|---|---|
+| `PropertyScoreAlgorithmTests.cs` | 10 (T1-01–T1-10) | xUnit | Wszystkie progi klasyfikacyjne, wynik ujemny |
+| `LocationWeightAlgorithmTests.cs` | 7 (T2-01–T2-07) | xUnit | Wszystkie strefy, progi 0.25/0.50/0.75 |
+| `SpecialCaseRuleAlgorithmTests.cs` | 8 (T3-01–T3-08) | xUnit | Każda reguła osobno, wartość graniczna 500 000/500 001 |
+| `HousingRiskRecommenderTests.cs` | 8 (TR-01–TR-08) | xUnit | Wszystkie przypadki rationale |
+| **Łącznie** | **33** | `dotnet test sample-app/dotnet-api-tests/` | |
 
-Każdy test weryfikuje konkretny wynik liczbowy, nie tylko typ zwracanego obiektu. Każdy próg klasyfikacyjny i każda reguła binarna z wartością graniczną mają własny przypadek testowy.
-
-Walidacja API (testy manualne lub opcjonalne testy integracyjne):
+### Walidacja API (testy manualne)
 
 | ID | Dane | Oczekiwany status |
 |----|------|------------------|
-| TV-01 | `floodZone: "X"` | 400 |
-| TV-02 | `buildingAge: -1` | 400 |
-| TV-03 | `floor: 5, totalFloors: 3` | 400 |
-| TV-04 | `claimsLast5Years: -1` | 400 |
-| TV-05 | kompletne poprawne dane | 200 OK |
-| TV-06 | `POST /risk-score` (istniejący) | 200 OK — brak regresji |
+| TV-01 | `floodZone: "X"` (nieznana wartość) | `400 Bad Request` |
+| TV-02 | `buildingAge: -1` | `400 Bad Request` |
+| TV-03 | `floor: 5, totalFloors: 3` | `400 Bad Request` |
+| TV-04 | `claimsLast5Years: -1` | `400 Bad Request` |
+| TV-05 | `insuredSumPLN: -100` | `400 Bad Request` |
+| TV-06 | Kompletne poprawne dane (przykład z `10-research.md`) | `200 OK` + JSON z trzema algorytmami |
+| TV-07 | `POST /risk-score` (istniejący endpoint) | `200 OK` — brak regresji |
 
 ### Stack Angular / Vitest
 
-| Plik testowy | Przypadki | Narzędzie |
-|---|---|---|
-| `housing-risk.service.test.ts` | 2 | Vitest + HttpTestingController |
-| `housing-risk.component.test.ts` | 4 | Vitest + Angular TestBed |
-| **Łącznie** | **6** | `npm test` w `angular-frontend/` |
+| Plik testowy | Przypadki | Narzędzie | Pokrycie |
+|---|---|---|---|
+| `housing-risk.service.test.ts` | 2 | Vitest + HttpTestingController | URL, body |
+| `housing-risk.component.test.ts` | 4 (C-01–C-04) | Vitest + Angular TestBed | Render, 200, 400, status 0 |
+| **Łącznie** | **6** | `npm test` w `angular-frontend/` | |
 
 ---
 
@@ -689,22 +827,22 @@ Walidacja API (testy manualne lub opcjonalne testy integracyjne):
 
 **Plik docelowy:** `sample-app/docs/housing-risk-algorithms.md`
 
-Coding worker pisze dokumentację jako ostatni krok (krok 19), gdy implementacja i testy są ukończone. Dokument nie może być wygenerowany przed implementacją — przykłady obliczeniowe muszą być zweryfikowane przez testy.
+Coding worker pisze dokumentację jako ostatni krok (krok 19), gdy implementacja i testy są ukończone. Nie generować przed implementacją — przykłady obliczeniowe muszą być zweryfikowane przez testy jednostkowe.
 
 ---
 
 ## Plan Rollback
 
-Wszystkie zmiany są addytywne — rollback nie wymaga migracji schematu ani koordynacji z innymi zespołami.
+Wszystkie zmiany addytywne — rollback bez migracji schematu.
 
 | Sytuacja | Działanie |
 |----------|-----------|
-| Błąd w algorytmie po merge | Revert commit dla pliku `Housing/XxxAlgorithm.cs` |
+| Błąd w algorytmie po merge | Revert commita dla pliku `Housing/XxxAlgorithm.cs` |
 | Błąd integracji frontendu | Usunięcie `<app-housing-risk>` z template i importu w `app.component.ts` |
-| Błąd endpointu w `Program.cs` | Usunięcie bloku `app.MapPost("/api/risk/housing/evaluate", ...)` |
+| Błąd endpointu | Usunięcie bloku `app.MapPost("/api/risk/housing/evaluate", ...)` z `Program.cs` |
 | Pełny rollback | `git revert` lub zamknięcie PR bez merge — `main` niezmieniony |
 
-Istniejące endpointy i typy nie są modyfikowane — rollback Housing nie dotyka `/risk-score` ani `RiskClass`.
+Istniejący endpoint `/risk-score` i typ `RiskClass` nie są modyfikowane — rollback Housing ich nie dotyka.
 
 ---
 
@@ -744,44 +882,46 @@ sample-app/docs/housing-risk-algorithms.md
 ```
 sample-app/dotnet-api/Program.cs
   → dodać: using SampleRiskApi.Housing;
-  → dodać: JsonStringEnumConverter (jeśli brak)
-  → dodać: app.MapPost("/api/risk/housing/evaluate", ...)
+  → dodać: JsonStringEnumConverter z CamelCaseNamingPolicy w ConfigureHttpJsonOptions
+  → dodać: app.MapPost("/api/risk/housing/evaluate", ...) używając Results.Json()
   → NIE modyfikować: istniejącego endpointu /risk-score
 
 sample-app/angular-frontend/src/main.ts
   → dodać: import { provideHttpClient } from '@angular/common/http';
   → dodać: provideHttpClient() do tablicy providers
+  → (pominąć jeśli provideHttpClient() już istnieje)
 
 sample-app/angular-frontend/src/app/app.component.ts
   → dodać: import HousingRiskComponent
-  → dodać: HousingRiskComponent do tablicy imports
-  → dodać: <app-housing-risk> w template
+  → dodać: HousingRiskComponent do tablicy imports w dekoratorze
+  → dodać: <app-housing-risk> w template po istniejącej sekcji
 ```
 
 ### Warunki ukończenia
 
 - [ ] `dotnet build sample-app/dotnet-api/` — zero błędów kompilacji
-- [ ] `dotnet test sample-app/dotnet-api-tests/` — wszystkie 32 testy zielone
+- [ ] `dotnet test sample-app/dotnet-api-tests/` — wszystkie 33 testy zielone
 - [ ] `npm test` w `sample-app/angular-frontend/` — wszystkie 6 testów Vitest zielone
-- [ ] `npm start` w `sample-app/angular-frontend/` — aplikacja uruchamia się bez błędów w konsoli
-- [ ] Ręczne wypełnienie formularza w przeglądarce + weryfikacja czterech kart (ALG-1, ALG-2, ALG-3, Rekomendacja)
+- [ ] `npm start` w `sample-app/angular-frontend/` — aplikacja uruchamia się bez błędów w konsoli przeglądarki
+- [ ] Ręczne wypełnienie formularza + weryfikacja czterech kart (ALG-1, ALG-2, ALG-3, Rekomendacja)
 - [ ] `POST /risk-score` nadal zwraca `200 OK` — brak regresji
-- [ ] `sample-app/docs/housing-risk-algorithms.md` zawiera wszystkie wymagane sekcje
+- [ ] `sample-app/docs/housing-risk-algorithms.md` zawiera wszystkie 7 sekcji
 
 ### Ograniczenia
 
 Coding worker **nie może**:
-- Modyfikować plików poza listą powyżej
-- Zmieniać wag algorytmu wagowego (flood=0.30, fire=0.20, theft=0.35, density=0.15)
+- Modyfikować plików spoza listy powyżej
+- Zmieniać wag algorytmu wagowego (`flood=0.30, fire=0.20, theft=0.35, density=0.15`)
+- Używać `Results.Ok()` zamiast `Results.Json()` w nowym endpoincie
 - Dodawać klasy `regulated` do `HousingRiskClass`
 - Mergować PR do `main` — wymagany code review (CP-3)
 
 ### Warunki zatrzymania (zgłosić blokadę)
 
-1. `sample-app/dotnet-api/SampleRiskApi.csproj` nie istnieje lub ma inną nazwę — zaktualizować `<ProjectReference>` w pliku `.csproj` testów.
+1. `sample-app/dotnet-api/SampleRiskApi.csproj` nie istnieje lub ma inną nazwę — zaktualizować `<ProjectReference>` w `.csproj` testów przed kontynuacją.
 2. `src/main.ts` używa `bootstrapModule` zamiast `bootstrapApplication` — wymagana inna ścieżka integracji `HttpClient`.
-3. `provideHttpClient()` już istnieje w `main.ts` — pominąć krok 17, nie duplikować.
-4. Backend używa .NET 6 — zaktualizować składnię `Results.BadRequest` i `Results.Ok`.
+3. Backend używa .NET 6 — składnia `Results.Json()` z `statusCode:` może wymagać innej przeciążonej sygnatury.
+4. `builder.Services.ConfigureHttpJsonOptions` nie istnieje (inna wersja SDK) — użyć `builder.Services.AddControllers().AddJsonOptions(...)` lub stringów bezpośrednich zamiast C# enum w request/response.
 
 ---
 
@@ -789,13 +929,11 @@ Coding worker **nie może**:
 
 | # | Moment | Wymagane działanie | Uzasadnienie |
 |---|--------|--------------------|--------------|
-| CP-3 | Przed merge do `main` | Code review PR — weryfikacja formuł, testów, zgodności z design.md | Gwarancja poprawności algorytmów przed wejściem do `main` |
-
-CP-1 (kształt API) i CP-2 (podział zadań) zostały spełnione przez zatwierdzenie artefaktów `40-architecture.md` i niniejszego `50-plan.md`.
+| CP-1 | Po `40-architecture.md` | Zatwierdzić kształt API, nazwy endpointów, typy domenowe | Spełniony przez zatwierdzenie `40-architecture.md` |
+| CP-2 | Po `50-plan.md` | Zatwierdzić kolejność kroków i warunki ukończenia | Spełniany przez zatwierdzenie niniejszego artefaktu |
+| CP-3 | Przed merge do `main` | Code review PR — weryfikacja formuł, testów, zgodności z `design.md` | Gwarancja poprawności matematycznej algorytmów i deterministyczności wyników |
 
 ---
-
-## Następne polecenie
 
 ```text
 /approve ai-coding
