@@ -1,9 +1,11 @@
 import { Component, computed, signal } from '@angular/core';
 import { classifyRisk, RiskSummary } from './risk-summary';
+import { HousingRiskComponent } from './housing/housing-risk.component';
 
 @Component({
   selector: 'pdlc-root',
   standalone: true,
+  imports: [HousingRiskComponent],
   template: `
     <main class="shell">
       <section class="card">
@@ -25,6 +27,7 @@ import { classifyRisk, RiskSummary } from './risk-summary';
         </div>
       </section>
     </main>
+    <app-housing-risk></app-housing-risk>
   `,
   styles: [`
     :host {
