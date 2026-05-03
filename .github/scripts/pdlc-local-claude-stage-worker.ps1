@@ -301,6 +301,27 @@ function Get-StageArtifactQualityIssues {
     return $issues
 }
 
+function Select-StageArtifactBody {
+    param(
+        [Parameter(Mandatory = $true)][string]$Text,
+        [Parameter(Mandatory = $true)][string]$StageKey
+    )
+
+    $pattern = if ($StageKey -eq "risk") {
+        "(?im)^\s*Mode\s*:\s*(Developer|Semi-auto|Full-auto)\s*$"
+    }
+    else {
+        "(?im)^\s*Status\s*:\s*(READY|BLOCKED_QUESTIONS)\s*$"
+    }
+
+    $match = [regex]::Match($Text, $pattern)
+    if (-not $match.Success -or $match.Index -eq 0) {
+        return $Text
+    }
+
+    return $Text.Substring($match.Index).TrimStart()
+}
+
 function Write-QualityGateDiagnostic {
     param(
         [Parameter(Mandatory = $true)]$Issue,
@@ -800,6 +821,7 @@ $failureExcerpt
     throw "Claude Code exited with code $exitCode."
 }
 
+$claudeOutputText = Select-StageArtifactBody -Text $claudeOutputText -StageKey $stage.Key
 $qualityIssues = @(Get-StageArtifactQualityIssues -Text $claudeOutputText -StageKey $stage.Key)
 if ($qualityIssues.Count -gt 0) {
     $outputExcerpt = Get-TextExcerpt -Text $claudeOutputText -MaxLength 2500
@@ -843,6 +865,7 @@ Start with the exact required status line for this stage.
     $retryOutput = $retryPrompt | & claude @claudeArgs 2>&1
     $retryExitCode = $LASTEXITCODE
     $claudeOutputText = ($retryOutput | ForEach-Object { $_.ToString() }) -join "`n"
+    $claudeOutputText = Select-StageArtifactBody -Text $claudeOutputText -StageKey $stage.Key
 
     if ($retryExitCode -ne 0) {
         Write-QualityGateDiagnostic -Issue $issue -Repository $Repository -Stage $stage -RunUrl $runUrl -QualityIssues $qualityIssues -OutputText $claudeOutputText -Prefix "Local Claude stage worker failed during artifact quality retry."

@@ -8,6 +8,8 @@ Each stage worker writes its output into `pdlc-runs/issue-<number>/`. These file
 
 ## Validation Rules
 
+Before validation, the worker trims any leading preamble and keeps the artifact body from the first required `Mode:` or `Status:` line. This protects the PR from chatty model prefaces while still preserving a valid document.
+
 The worker rejects an artifact when:
 
 - the output is empty,
