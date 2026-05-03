@@ -260,7 +260,7 @@ Expected output:
 
 Write-Utf8File -Path $promptPath -Content $prompt
 
-$allowedTools = "Read,Edit,Write,Glob,Grep,LS,Bash(git status:*),Bash(git diff:*),Bash(dotnet build:*),Bash(dotnet test:*),Bash(mvn test:*),Bash(npm install:*),Bash(npm run build:*)"
+$allowedTools = "Read,Edit,Write,Glob,Grep,LS,Bash(git status:*),Bash(git diff:*),Bash(dotnet build:*),Bash(dotnet test:*),Bash(mvn test:*),Bash(npm ci:*),Bash(npm install:*),Bash(npm run build:*),Bash(npm run test:*)"
 $claudeArgs = @(
     "--print",
     "--model", $model,
@@ -272,24 +272,86 @@ $claudeArgs = @(
 
 $claudeOutput = $prompt | & claude @claudeArgs 2>&1
 $exitCode = $LASTEXITCODE
+$claudeOutputText = ($claudeOutput | ForEach-Object { $_.ToString() }) -join "`n"
+$branchName = [string]$pr.headRefName
+
+# Avoid PowerShell here-strings with Markdown ``` fences (backtick + `t is parsed as tab).
 $output = @"
 # Claude Review Fix Worker Output
 
-Model: `$model`
+Model: $model
 Budget: `$$budget`
 PR: #$prNumber
-Branch: `$($pr.headRefName)`
+Branch: $branchName
 
 ## Claude Output
 
-```text
-$claudeOutput
-```
+~~~text
+$claudeOutputText
+~~~
 "@
 Write-Utf8File -Path $outputPath -Content $output
 
+function Write-ReviewFixStepSummary {
+    param([Parameter(Mandatory = $true)][string]$Markdown)
+    $path = $env:GITHUB_STEP_SUMMARY
+    if (-not $path) {
+        return
+    }
+    Add-Content -LiteralPath $path -Value $Markdown -Encoding utf8
+}
+
 if ($exitCode -ne 0) {
-    gh pr comment $prNumber --repo $Repository --body "Local Claude review-fix worker failed before pushing changes. Run: $env:GITHUB_SERVER_URL/$Repository/actions/runs/$RunId"
+    $runUrl = "$env:GITHUB_SERVER_URL/$Repository/actions/runs/$RunId"
+    $limitHit = $claudeOutputText -match '(?i)(you''ve hit your limit|hit your limit|rate limit|billing|usage limit)'
+    if ($limitHit) {
+        $body = @(
+            "**Review-fix: Claude Code nie wykonał zmian (limit konta / planu Anthropic)**",
+            "",
+            "W logu workera widać komunikat o **wyczerpanym limicie** (czas resetu albo billing). To **nie** jest błąd skryptu PDLC ani Twojego kodu w PR — worker nie dostał możliwości pracy od API.",
+            "",
+            "**Co zrobić:** sprawdź plan i zużycie w konsoli Anthropic / Claude Code, odczekaj do resetu z komunikatu, potem ponów komentarz z ``/fix-review`` na tym PR.",
+            "",
+            "- Run Actions: $runUrl",
+            "- Zapisany output (na runnerze): ``$outputPath``"
+        ) -join "`n"
+        Write-ReviewFixStepSummary (@(
+            "## Review-fix — limit Claude / Anthropic",
+            "",
+            "Worker zatrzymał się, bo Claude Code zwrócił komunikat o **limicie** (plan, okno czasowe lub budżet), a nie dlatego, że PR jest „zły”.",
+            "",
+            "**Dalsze kroki:** odnowienie dostępu / odczekanie do resetu → ponów ``/fix-review``.",
+            "",
+            "Run: [$runUrl]($runUrl)"
+        ) -join "`n")
+    }
+    else {
+        $excerpt = if ($claudeOutputText.Length -gt 2800) {
+            "$($claudeOutputText.Substring(0, 2800))`n`n... truncated; see ``$outputPath`` on the runner ..."
+        }
+        else {
+            $claudeOutputText
+        }
+        $body = @(
+            "**Review-fix: Claude Code zakończył się błędem (exit $exitCode)**",
+            "",
+            "Poniżej skrót stdout/stderr. Pełny zapis: plik ``$outputPath`` na runnerze oraz run w Actions.",
+            "",
+            "~~~text",
+            $excerpt,
+            "~~~",
+            "",
+            "Run: $runUrl"
+        ) -join "`n"
+        Write-ReviewFixStepSummary (@(
+            "## Review-fix — Claude Code exit $exitCode",
+            "",
+            "Zobacz log kroku **Run local Claude Code review-fix worker** oraz komentarz na PR.",
+            "",
+            "Run: [$runUrl]($runUrl)"
+        ) -join "`n")
+    }
+    gh pr comment $prNumber --repo $Repository --body $body
     throw "Claude Code exited with code $exitCode."
 }
 

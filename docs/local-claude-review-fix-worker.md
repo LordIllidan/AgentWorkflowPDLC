@@ -92,3 +92,5 @@ See `docs/external-agent-config-repository.md`.
 - If Claude produces no file changes, the workflow fails and comments on the PR.
 - Manually dispatched CI may not appear as a native required PR check.
 - Multiple `/fix-review` comments can start multiple local jobs, so avoid parallel runs on the same PR.
+- If **Claude Code** returns a **quota / plan limit** message (for example *You've hit your limit*), the worker fails without changing the branch. The workflow now posts a **PR comment** and a **Job summary** explaining that case; after reset or billing fix, run `/fix-review` again.
+
