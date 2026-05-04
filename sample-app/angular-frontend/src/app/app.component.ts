@@ -6,29 +6,7 @@ import { HousingRiskComponent } from './housing/housing-risk.component';
   selector: 'pdlc-root',
   standalone: true,
   imports: [HousingRiskComponent],
-  template: `
-    <main class="shell">
-      <section class="card">
-        <p class="eyebrow">AgentWorkflowPDLC sample</p>
-        <h1>Przykładowy scoring ryzyka PDLC</h1>
-        <p>
-          Ten dummy frontend służy do testowania etapów: analiza, wymagania, planowanie, coding,
-          QA, security, dokumentacja, wdrożenie i utrzymanie.
-        </p>
-
-        <label>
-          Wynik ryzyka
-          <input type="number" [value]="score()" (input)="setScore($event)" min="0" max="100">
-        </label>
-
-        <div class="result">
-          <span>Klasa ryzyka</span>
-          <strong>{{ summary().riskClass }}</strong>
-        </div>
-      </section>
-    </main>
-    <app-housing-risk></app-housing-risk>
-  `,
+  templateUrl: './app.component.html',
   styles: [`
     :host {
       display: block;

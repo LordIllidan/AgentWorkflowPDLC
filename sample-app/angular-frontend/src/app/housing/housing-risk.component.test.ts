@@ -30,11 +30,11 @@ const mockResponse = {
 describe('HousingRiskComponent', () => {
   let httpMock: HttpTestingController;
 
-  beforeEach(() => {
-    TestBed.configureTestingModule({
+  beforeEach(async () => {
+    await TestBed.configureTestingModule({
       imports: [HousingRiskComponent],
       providers: [provideHttpClient(), provideHttpClientTesting()],
-    });
+    }).compileComponents();
     httpMock = TestBed.inject(HttpTestingController);
   });
 
