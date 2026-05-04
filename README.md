@@ -75,6 +75,7 @@ docs/
   external-agent-config-repository.md
   pdlc-agent-router.md
   pdlc-command-driven-stage-agents.md
+  pdlc-prezentacja-proces-dyrektor.md
   pdlc-spec-artifacts-in-pr.md
   pr-workflow-test-scenario.md
 ```
@@ -98,4 +99,5 @@ See `docs/external-agent-config-repository.md` for fetched agent configuration.
 See `docs/pdlc-agent-router.md` for centralized GitHub event routing.
 See `docs/pdlc-command-driven-stage-agents.md` for staged GitHub issue commands.
 See `docs/pdlc-spec-artifacts-in-pr.md` for PR-visible spec artifacts.
+See `docs/pdlc-prezentacja-proces-dyrektor.md` for an executive process overview (diagrams, Polish).
 
