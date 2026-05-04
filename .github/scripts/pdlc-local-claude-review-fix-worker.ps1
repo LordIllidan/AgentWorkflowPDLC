@@ -326,7 +326,7 @@ if ($exitCode -ne 0) {
         Write-ReviewFixStepSummary (@(
             "## Review-fix — limit Claude / Anthropic",
             "",
-            "Worker zatrzymał się, bo Claude Code zwrócił komunikat o **limicie** (plan, okno czasowe lub budżet), a nie dlatego, że PR jest „zły”.",
+            "Worker zatrzymał się, bo Claude Code zwrócił komunikat o **limicie** (plan, okno czasowe lub budżet). Problem to quota API / billing, nie jakość zmian w PR.",
             "",
             "**Dalsze kroki:** odnowienie dostępu / odczekanie do resetu → ponów ``/fix-review``.",
             "",
