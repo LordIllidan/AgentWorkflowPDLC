@@ -1,31 +1,12 @@
 import { Component, computed, signal } from '@angular/core';
 import { classifyRisk, RiskSummary } from './risk-summary';
+import { HousingRiskComponent } from './housing/housing-risk.component';
 
 @Component({
   selector: 'pdlc-root',
   standalone: true,
-  template: `
-    <main class="shell">
-      <section class="card">
-        <p class="eyebrow">AgentWorkflowPDLC sample</p>
-        <h1>Przykładowy scoring ryzyka PDLC</h1>
-        <p>
-          Ten dummy frontend służy do testowania etapów: analiza, wymagania, planowanie, coding,
-          QA, security, dokumentacja, wdrożenie i utrzymanie.
-        </p>
-
-        <label>
-          Wynik ryzyka
-          <input type="number" [value]="score()" (input)="setScore($event)" min="0" max="100">
-        </label>
-
-        <div class="result">
-          <span>Klasa ryzyka</span>
-          <strong>{{ summary().riskClass }}</strong>
-        </div>
-      </section>
-    </main>
-  `,
+  imports: [HousingRiskComponent],
+  templateUrl: './app.component.html',
   styles: [`
     :host {
       display: block;
